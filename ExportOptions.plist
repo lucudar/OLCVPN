@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- development = установка на свои зарегистрированные устройства. -->
+    <!-- Если у тебя Distribution-сертификат — поставь ad-hoc. -->
+    <key>method</key>
+    <string>development</string>
+
+    <!-- ЗАМЕНИ на свой Team ID (10 символов из Apple Developer). -->
+    <key>teamID</key>
+    <string>ABCDE12345</string>
+
+    <key>signingStyle</key>
+    <string>manual</string>
+
+    <key>compileBitcode</key>
+    <false/>
+
+    <key>stripSwiftSymbols</key>
+    <true/>
+
+    <!-- КЛЮЧ = bundle id, ЗНАЧЕНИЕ = имя provisioning-профиля с портала Apple. -->
+    <key>provisioningProfiles</key>
+    <dict>
+        <key>com.you.olcvpn</key>
+        <string>OLCVPN App Profile</string>
+        <key>com.you.olcvpn.OLCTunnel</key>
+        <string>OLCVPN Tunnel Profile</string>
+    </dict>
+</dict>
+</plist>

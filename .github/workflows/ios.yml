@@ -1,0 +1,73 @@
+name: iOS Build
+
+# Signed build: run manually only (needs signing secrets, see BUILD_VIA_GITHUB.md)
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install tools
+        run: brew install xcodegen
+
+      - name: Clone olcRTC core
+        run: git clone --depth 1 https://github.com/openlibrecommunity/olcrtc.git "$RUNNER_TEMP/olcrtc"
+
+      - name: Build frameworks + generate Xcode project
+        run: |
+          chmod +x build.sh
+          ./build.sh "$RUNNER_TEMP/olcrtc"
+
+      # ---- SIGNING (needs repo secrets, see BUILD_VIA_GITHUB.md) ----
+      - name: Import signing certificate & profiles
+        env:
+          CERT_P12_BASE64: ${{ secrets.CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.CERT_PASSWORD }}
+          PROFILE_APP_BASE64: ${{ secrets.PROFILE_APP_BASE64 }}
+          PROFILE_EXT_BASE64: ${{ secrets.PROFILE_EXT_BASE64 }}
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/app.keychain-db"
+          security create-keychain -p "" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "" "$KEYCHAIN"
+          echo "$CERT_P12_BASE64" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -k "$KEYCHAIN" -P "$CERT_PASSWORD" -T /usr/bin/codesign
+          security list-keychain -d user -s "$KEYCHAIN" login.keychain-db
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "" "$KEYCHAIN"
+          PROFILES_DIR="$HOME/Library/MobileDevice/Provisioning Profiles"
+          mkdir -p "$PROFILES_DIR"
+          echo "$PROFILE_APP_BASE64" | base64 --decode > "$PROFILES_DIR/app.mobileprovision"
+          echo "$PROFILE_EXT_BASE64" | base64 --decode > "$PROFILES_DIR/ext.mobileprovision"
+
+      - name: Archive
+        run: |
+          xcodebuild -project OLCVPN.xcodeproj \
+            -scheme OLCVPN \
+            -configuration Release \
+            -archivePath "$RUNNER_TEMP/OLCVPN.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_STYLE=Manual \
+            archive
+
+      - name: Export signed IPA
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/OLCVPN.xcarchive" \
+            -exportPath "$RUNNER_TEMP/export" \
+            -exportOptionsPlist ExportOptions.plist
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OLCVPN-ipa
+          path: ${{ runner.temp }}/export/*.ipa
+          if-no-files-found: error

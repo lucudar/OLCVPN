@@ -1,0 +1,70 @@
+name: iOS Build (Unsigned)
+
+# Builds an UNSIGNED .ipa - no Apple certificates or profiles required.
+# You sign it yourself on your phone/PC (AltStore, Sideloadly, ESign, etc.).
+# Run: Actions tab -> "iOS Build (Unsigned)" -> Run workflow.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install tools
+        run: brew install xcodegen
+
+      - name: Clone olcRTC core
+        run: git clone --depth 1 https://github.com/openlibrecommunity/olcrtc.git "$RUNNER_TEMP/olcrtc"
+
+      - name: Build frameworks + generate Xcode project
+        run: |
+          chmod +x build.sh
+          ./build.sh "$RUNNER_TEMP/olcrtc"
+
+      # ---- BUILD WITHOUT CODE SIGNING ----
+      - name: Archive (no code signing)
+        run: |
+          xcodebuild -project OLCVPN.xcodeproj \
+            -scheme OLCVPN \
+            -configuration Release \
+            -sdk iphoneos \
+            -archivePath "$RUNNER_TEMP/OLCVPN.xcarchive" \
+            -destination 'generic/platform=iOS' \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            DEVELOPMENT_TEAM="" \
+            archive
+
+      - name: Package unsigned .ipa
+        run: |
+          APP_DIR="$RUNNER_TEMP/OLCVPN.xcarchive/Products/Applications"
+          if [ ! -d "$APP_DIR" ]; then
+            echo "::error::Applications folder not found in archive"; exit 1
+          fi
+          rm -rf "$GITHUB_WORKSPACE/export"
+          mkdir -p "$GITHUB_WORKSPACE/export"
+          WORKDIR="$RUNNER_TEMP/payload"
+          rm -rf "$WORKDIR" && mkdir -p "$WORKDIR/Payload"
+          cp -R "$APP_DIR"/*.app "$WORKDIR/Payload/"
+          ( cd "$WORKDIR" && zip -qry "$GITHUB_WORKSPACE/export/OLCVPN-unsigned.ipa" Payload )
+          echo "Built:"; ls -la "$GITHUB_WORKSPACE/export"
+
+      - name: Upload unsigned IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: OLCVPN-unsigned-ipa
+          path: export/*.ipa
+          if-no-files-found: error
