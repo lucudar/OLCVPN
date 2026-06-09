@@ -37,6 +37,7 @@ targets:
     sources:
       - path: OLCTunnel
       - path: Shared
+      - path: App/Model/Profile.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.you.olcvpn.OLCTunnel
