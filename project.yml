@@ -51,6 +51,7 @@ targets:
           - $(SRCROOT)/Vendor/hev/lib
         OTHER_LDFLAGS:
           - -lhev-socks5-tunnel
+          - -lresolv
     dependencies:
       # Собирается build.sh в Frameworks/ перед generate:
       - framework: Frameworks/Olcrtc.xcframework

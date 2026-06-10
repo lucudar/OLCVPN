@@ -34,8 +34,17 @@ fi
        CFLAGS="-arch arm64 -isysroot $(xcrun --sdk iphoneos --show-sdk-path) -miphoneos-version-min=16.0" \
        static )
 mkdir -p "$ROOT/Vendor/hev/lib" "$ROOT/Vendor/hev/include"
-cp Vendor/hev-socks5-tunnel/bin/libhev-socks5-tunnel.a "$ROOT/Vendor/hev/lib/" 2>/dev/null \
-  || cp Vendor/hev-socks5-tunnel/build/libhev-socks5-tunnel.a "$ROOT/Vendor/hev/lib/"
+
+# hev-socks5-tunnel зависит от подмодулей hev-task-system, lwip и yaml,
+# которые собираются в отдельные .a (third-part/*/bin/*.a).
+# Линкеру нужны все эти символы, поэтому объединяем ВСЕ статические
+# библиотеки в один архив libhev-socks5-tunnel.a.
+HEV_LIBS=$(find Vendor/hev-socks5-tunnel -name '*.a')
+echo "    → объединяю статические библиотеки в один архив:"
+echo "$HEV_LIBS" | sed 's/^/        /'
+libtool -static -o "$ROOT/Vendor/hev/lib/libhev-socks5-tunnel.a" $HEV_LIBS
+
+# Заголовки hev-socks5-tunnel
 cp Vendor/hev-socks5-tunnel/include/*.h "$ROOT/Vendor/hev/include/" 2>/dev/null || true
 
 echo "==> [3/4] xcodegen generate"
