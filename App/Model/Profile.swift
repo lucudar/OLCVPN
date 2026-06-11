@@ -4,11 +4,13 @@ import Foundation
 enum OLCTransport: String, Codable, CaseIterable, Identifiable {
     case vp8channel
     case datachannel
+    case sei
     var id: String { rawValue }
     var title: String {
         switch self {
         case .vp8channel: return "VP8 channel"
         case .datachannel: return "Data channel"
+        case .sei:        return "SEI"
         }
     }
 }
@@ -19,6 +21,12 @@ enum OLCCarrier: String, Codable, CaseIterable, Identifiable {
     case telemost
     case wbstream
     var id: String { rawValue }
+}
+
+/// Ключи параметров транспорта в payload olcrtc:// (<k=v&k=v>).
+enum OLCTransportParam {
+    static let vp8FPS = "vp8-fps"
+    static let vp8Batch = "vp8-batch"
 }
 
 /// Профиль подключения. `keyHex` хранится НЕ здесь, а в Keychain (по id).

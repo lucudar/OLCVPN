@@ -10,6 +10,7 @@ struct ActiveConfig: Codable {
     var dns: String
     var socksPort: Int
     var keyHex: String
+    var debug: Bool
 }
 
 enum SharedConfig {
@@ -21,14 +22,15 @@ enum SharedConfig {
     }
 
     /// Сохранить активный профиль (вызывается из app перед connect).
-    static func saveActive(profile: Profile, keyHex: String) {
+    static func saveActive(profile: Profile, keyHex: String, debug: Bool = true) {
         let payload: [String: Any] = [
             "carrier": profile.carrier.rawValue,
             "roomID": profile.roomID,
             "clientID": profile.clientID,
             "transport": profile.transport.rawValue,
             "dns": profile.dns,
-            "socksPort": profile.socksPort
+            "socksPort": profile.socksPort,
+            "debug": debug
         ]
         defaults?.set(payload, forKey: activeKey)
         KeychainHelper.set(keyHex, account: keyAccount)
@@ -45,7 +47,9 @@ enum SharedConfig {
               let socksPort = dict["socksPort"] as? Int,
               let keyHex = KeychainHelper.get(account: keyAccount)
         else { return nil }
+        let debug = (dict["debug"] as? Bool) ?? true
         return ActiveConfig(carrier: carrier, roomID: roomID, clientID: clientID,
-                            transport: transport, dns: dns, socksPort: socksPort, keyHex: keyHex)
+                            transport: transport, dns: dns, socksPort: socksPort,
+                            keyHex: keyHex, debug: debug)
     }
 }

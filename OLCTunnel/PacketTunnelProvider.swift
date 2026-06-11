@@ -10,16 +10,19 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                               completionHandler: @escaping (Error?) -> Void) {
         guard let cfg = SharedConfig.loadActive() else {
             os_log("Нет активного конфига", log: log, type: .error)
+            DiagLog.log("Нет активного профиля", tag: "tunnel")
             completionHandler(NSError(domain: "olc", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Нет активного профиля"]))
             return
         }
 
+        DiagLog.log("Старт туннеля: \(cfg.carrier)/\(cfg.transport) room=\(cfg.roomID)", tag: "tunnel")
+
         // 1) Настройка ядра olcRTC
         OLCCore.setProviders()
         OLCCore.setTransport(cfg.transport)
         OLCCore.setDNS(cfg.dns)
-        OLCCore.setDebug(true)
+        OLCCore.setDebug(cfg.debug)
 
         // 2) Запуск SOCKS5 ядра в фоне
         do {
@@ -30,6 +33,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         } catch {
             os_log("Ядро не стартовало: %{public}@", log: log, type: .error,
                    error.localizedDescription)
+            DiagLog.log("Ядро не стартовало: \(error.localizedDescription)", tag: "tunnel")
             completionHandler(error)
             return
         }
@@ -48,6 +52,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             if let error = error {
                 os_log("setTunnelNetworkSettings: %{public}@", log: self.log, type: .error,
                        error.localizedDescription)
+                DiagLog.log("setTunnelNetworkSettings: \(error.localizedDescription)", tag: "tunnel")
                 completionHandler(error)
                 return
             }
@@ -57,6 +62,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                                        socksPort: cfg.socksPort)
             self.tun2socks?.start()
             os_log("Туннель запущен", log: self.log, type: .info)
+            DiagLog.log("Туннель запущен", tag: "tunnel")
             completionHandler(nil)
         }
     }
@@ -64,6 +70,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     override func stopTunnel(with reason: NEProviderStopReason,
                              completionHandler: @escaping () -> Void) {
         os_log("Остановка туннеля: %d", log: log, type: .info, reason.rawValue)
+        DiagLog.log("Остановка туннеля (\(reason.rawValue))", tag: "tunnel")
         tun2socks?.stop()
         tun2socks = nil
         OLCCore.stop()

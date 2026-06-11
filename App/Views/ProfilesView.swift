@@ -3,6 +3,7 @@ import SwiftUI
 struct ProfilesView: View {
     @EnvironmentObject var store: ConfigStore
     @State private var showingImport = false
+    @State private var editing: Profile?
 
     var body: some View {
         NavigationStack {
@@ -24,9 +25,19 @@ struct ProfilesView: View {
                         }
                     }
                     .tint(.primary)
-                }
-                .onDelete { idx in
-                    idx.map { store.profiles[$0] }.forEach(store.delete)
+                    .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                        Button(role: .destructive) {
+                            store.delete(p)
+                        } label: {
+                            Label("Удалить", systemImage: "trash")
+                        }
+                        Button {
+                            editing = p
+                        } label: {
+                            Label("Изменить", systemImage: "slider.horizontal.3")
+                        }
+                        .tint(.blue)
+                    }
                 }
             }
             .navigationTitle("Профили")
@@ -36,6 +47,9 @@ struct ProfilesView: View {
                 }
             }
             .sheet(isPresented: $showingImport) { ImportView() }
+            .sheet(item: $editing) { p in
+                NavigationStack { ProfileEditView(profile: p) }
+            }
             .overlay {
                 if store.profiles.isEmpty {
                     VStack(spacing: 8) {

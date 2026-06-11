@@ -28,6 +28,7 @@ final class TunnelManager: ObservableObject {
             observeStatus()
         } catch {
             self.lastError = error.localizedDescription
+            DiagLog.log("prepare ошибка: \(error.localizedDescription)")
         }
     }
 
@@ -35,13 +36,16 @@ final class TunnelManager: ObservableObject {
         guard let manager else { lastError = "VPN не настроен"; return }
         do {
             try manager.connection.startVPNTunnel()
+            DiagLog.log("Запрос подключения")
         } catch {
             lastError = error.localizedDescription
+            DiagLog.log("connect ошибка: \(error.localizedDescription)")
         }
     }
 
     func disconnect() {
         manager?.connection.stopVPNTunnel()
+        DiagLog.log("Запрос отключения")
     }
 
     private func observeStatus() {

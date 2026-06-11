@@ -1,13 +1,15 @@
 import Foundation
 import Combine
 
-/// Хранилище списка профилей (в App Group). Ключи — в Keychain по profile.id.
+/// Хранилище списка профилей и настроек (в App Group). Ключи — в Keychain по profile.id.
 final class ConfigStore: ObservableObject {
     @Published var profiles: [Profile] = []
     @Published var activeProfileID: UUID?
+    @Published var settings: AppSettings = AppSettings()
 
     private let listKey = "olc.profiles.list"
     private let activeIDKey = "olc.profiles.activeID"
+    private let settingsKey = "olc.settings"
     private var defaults: UserDefaults? { UserDefaults(suiteName: OLC.appGroup) }
 
     init() { load() }
@@ -18,6 +20,10 @@ final class ConfigStore: ObservableObject {
             profiles = list
         }
         if let s = defaults?.string(forKey: activeIDKey) { activeProfileID = UUID(uuidString: s) }
+        if let data = defaults?.data(forKey: settingsKey),
+           let s = try? JSONDecoder().decode(AppSettings.self, from: data) {
+            settings = s
+        }
     }
 
     private func persist() {
@@ -25,6 +31,9 @@ final class ConfigStore: ObservableObject {
             defaults?.set(data, forKey: listKey)
         }
         defaults?.set(activeProfileID?.uuidString, forKey: activeIDKey)
+        if let data = try? JSONEncoder().encode(settings) {
+            defaults?.set(data, forKey: settingsKey)
+        }
     }
 
     func keyHex(for profile: Profile) -> String? {
@@ -58,6 +67,11 @@ final class ConfigStore: ObservableObject {
         persist()
     }
 
+    func updateSettings(_ newValue: AppSettings) {
+        settings = newValue
+        persist()
+    }
+
     var activeProfile: Profile? {
         profiles.first { $0.id == activeProfileID }
     }
@@ -65,7 +79,7 @@ final class ConfigStore: ObservableObject {
     /// Переносит активный профиль + ключ в SharedConfig для extension.
     func publishActiveToTunnel() -> Bool {
         guard let p = activeProfile, let key = keyHex(for: p) else { return false }
-        SharedConfig.saveActive(profile: p, keyHex: key)
+        SharedConfig.saveActive(profile: p, keyHex: key, debug: settings.debugLogging)
         return true
     }
 }

@@ -1,6 +1,6 @@
 import Foundation
 
-/// Парсер компактного формата olcrtc:// (клиентское соглашение).
+/// Парсер/сборщик компактного формата olcrtc:// (клиентское соглашение).
 ///
 ///   olcrtc://<Auth>?<Transport>@<RoomID>#<EncryptionKey>$<MIMO>
 ///   olcrtc://<Auth>?<Transport><key=value&key=value>@<RoomID>#<EncryptionKey>$<MIMO>
@@ -78,6 +78,22 @@ enum OLCUri {
         profile.transportParams = params
         profile.note = note
         return (profile, keyHex)
+    }
+
+    /// Собирает строку olcrtc:// из профиля и ключа (обратная операция к parse).
+    static func serialize(profile: Profile, keyHex: String) -> String {
+        var payload = ""
+        if !profile.transportParams.isEmpty {
+            let pairs = profile.transportParams
+                .sorted { $0.key < $1.key }
+                .map { "\($0.key)=\($0.value)" }
+                .joined(separator: "&")
+            payload = "<\(pairs)>"
+        }
+        var s = "\(scheme)\(profile.carrier.rawValue)?\(profile.transport.rawValue)\(payload)@\(profile.roomID)#\(keyHex)"
+        let mimo = profile.note.isEmpty ? profile.name : profile.note
+        if !mimo.isEmpty { s += "$\(mimo)" }
+        return s
     }
 
     static func isValidKeyHex(_ key: String) -> Bool {

@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Импорт профиля: вставка ссылки olcrtc:// и (опционально) clientID.
 struct ImportView: View {
@@ -18,6 +19,11 @@ struct ImportView: View {
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
                         .font(.system(.body, design: .monospaced))
+                    Button {
+                        if let s = UIPasteboard.general.string { uri = s }
+                    } label: {
+                        Label("Вставить из буфера", systemImage: "doc.on.clipboard")
+                    }
                 }
 
                 Section("Параметры") {
@@ -56,11 +62,15 @@ struct ImportView: View {
     private func add() {
         do {
             var (profile, key) = try OLCUri.parse(uri)
+            // Применяем глобальные настройки по умолчанию.
+            profile.dns = store.settings.defaultDNS
+            profile.socksPort = store.settings.defaultSocksPort
             let trimmed = clientID.trimmingCharacters(in: .whitespacesAndNewlines)
             if !trimmed.isEmpty {
                 profile.clientID = trimmed
             }
             store.add(profile: profile, keyHex: key)
+            DiagLog.log("Импорт профиля: \(profile.name)")
             dismiss()
         } catch {
             errorText = Self.describe(error)

@@ -1,9 +1,13 @@
 import SwiftUI
 
-/// Экран настроек: сведения о приложении и активном профиле.
+/// Экран настроек: состояние, редактор активного профиля, глобальные настройки, диагностика.
 struct SettingsView: View {
     @EnvironmentObject var store: ConfigStore
     @EnvironmentObject var tunnel: TunnelManager
+
+    @State private var dns: String = ""
+    @State private var portText: String = ""
+    @State private var debug: Bool = true
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -16,30 +20,40 @@ struct SettingsView: View {
             Form {
                 Section("Состояние") {
                     LabeledContent("VPN", value: tunnel.statusText)
-                    if let p = store.activeProfile {
-                        LabeledContent("Профиль", value: p.name)
-                    } else {
-                        LabeledContent("Профиль", value: "не выбран")
-                    }
+                    LabeledContent("Профиль", value: store.activeProfile?.name ?? "не выбран")
                 }
 
                 if let p = store.activeProfile {
                     Section("Активный профиль") {
-                        LabeledContent("Carrier", value: p.carrier.rawValue)
-                        LabeledContent("Транспорт", value: p.transport.title)
-                        LabeledContent("Room ID", value: p.roomID)
-                        if !p.clientID.isEmpty {
-                            LabeledContent("Client ID", value: p.clientID)
+                        NavigationLink {
+                            ProfileEditView(profile: p)
+                        } label: {
+                            LabeledContent("Редактировать", value: p.name)
                         }
+                        LabeledContent("Транспорт", value: p.transport.title)
                         LabeledContent("DNS", value: p.dns)
                         LabeledContent("SOCKS-порт", value: String(p.socksPort))
                     }
                 }
 
-                Section("Сеть") {
-                    LabeledContent("DNS по умолчанию", value: OLC.defaultDNS)
-                    LabeledContent("SOCKS-порт ядра", value: String(OLC.socksPort))
-                    LabeledContent("Адрес туннеля", value: OLC.tunnelIP)
+                Section {
+                    TextField("DNS по умолчанию", text: $dns)
+                        .textInputAutocapitalization(.never).autocorrectionDisabled(true)
+                    TextField("SOCKS-порт по умолчанию", text: $portText)
+                        .keyboardType(.numberPad)
+                    Toggle("Подробные логи", isOn: $debug)
+                } header: {
+                    Text("Настройки по умолчанию")
+                } footer: {
+                    Text("DNS и порт применяются к новым импортированным профилям. Логи влияют на ядро при следующем подключении.")
+                }
+
+                Section("Диагностика") {
+                    NavigationLink {
+                        DiagnosticsView()
+                    } label: {
+                        Label("Журнал диагностики", systemImage: "doc.text.magnifyingglass")
+                    }
                 }
 
                 Section("О приложении") {
@@ -48,6 +62,25 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("Настройки")
+            .onAppear(perform: loadSettings)
+            .onChange(of: dns) { _ in saveSettings() }
+            .onChange(of: portText) { _ in saveSettings() }
+            .onChange(of: debug) { _ in saveSettings() }
         }
+    }
+
+    private func loadSettings() {
+        dns = store.settings.defaultDNS
+        portText = String(store.settings.defaultSocksPort)
+        debug = store.settings.debugLogging
+    }
+
+    private func saveSettings() {
+        var s = store.settings
+        s.defaultDNS = dns.trimmingCharacters(in: .whitespaces)
+        if let port = Int(portText), port > 0 { s.defaultSocksPort = port }
+        s.debugLogging = debug
+        guard s != store.settings else { return }
+        store.updateSettings(s)
     }
 }
