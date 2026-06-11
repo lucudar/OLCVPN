@@ -69,7 +69,7 @@ jobs:
       - name: Publish .ipa to GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: build-$ github.run_number 
-          name: Unsigned build #$ github.run_number 
+          tag_name: unsigned
+          name: OLCVPN (unsigned)
           body: Unsigned OLCVPN .ipa. Sign it yourself (AltStore / Sideloadly / ESign).
           files: export/OLCVPN-unsigned.ipa
