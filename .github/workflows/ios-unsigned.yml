@@ -2,6 +2,8 @@ name: iOS Build (Unsigned)
 
 # Builds an UNSIGNED .ipa - no Apple certificates or profiles required.
 # You sign it yourself on your phone/PC (AltStore, Sideloadly, ESign, etc.).
+# The .ipa is published as a GitHub Release asset (not an Actions artifact),
+# so it does NOT use the Actions artifact storage quota.
 # Run: Actions tab -> "iOS Build (Unsigned)" -> Run workflow.
 
 on:
@@ -9,13 +11,15 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -62,9 +66,10 @@ jobs:
           ( cd "$WORKDIR" && zip -qry "$GITHUB_WORKSPACE/export/OLCVPN-unsigned.ipa" Payload )
           echo "Built:"; ls -la "$GITHUB_WORKSPACE/export"
 
-      - name: Upload unsigned IPA artifact
-        uses: actions/upload-artifact@v4
+      - name: Publish .ipa to GitHub Release
+        uses: softprops/action-gh-release@v2
         with:
-          name: OLCVPN-unsigned-ipa
-          path: export/*.ipa
-          if-no-files-found: error
+          tag_name: build-$ github.run_number 
+          name: Unsigned build #$ github.run_number 
+          body: Unsigned OLCVPN .ipa. Sign it yourself (AltStore / Sideloadly / ESign).
+          files: export/OLCVPN-unsigned.ipa
