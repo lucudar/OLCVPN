@@ -14,7 +14,7 @@ struct ProfilesView: View {
                         HStack {
                             VStack(alignment: .leading) {
                                 Text(p.name).font(.body)
-                                Text("\(p.carrier.rawValue) · \(p.transport.rawValue) · \(p.roomID)")
+                                Text("\(p.carrier.rawValue) \u{00B7} \(p.transport.rawValue) \u{00B7} \(p.roomID)")
                                     .font(.caption).foregroundStyle(.secondary)
                             }
                             Spacer()
@@ -38,9 +38,18 @@ struct ProfilesView: View {
             .sheet(isPresented: $showingImport) { ImportView() }
             .overlay {
                 if store.profiles.isEmpty {
-                    ContentUnavailableView("Нет профилей",
-                        systemImage: "tray",
-                        description: Text("Добавь профиль через olcrtc:// или вручную"))
+                    VStack(spacing: 8) {
+                        Image(systemName: "tray")
+                            .font(.largeTitle)
+                            .foregroundStyle(.secondary)
+                        Text("Нет профилей")
+                            .font(.headline)
+                        Text("Добавь профиль через olcrtc:// или вручную")
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding()
                 }
             }
         }
