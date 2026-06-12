@@ -5,11 +5,12 @@ import UIKit
 ///
 /// Собирает два источника:
 ///   1) DiagLog (лог приложения + расширения через App Group, если доступен);
-///   2) лог расширения, забранный по IPC и сохранённый в UserDefaults.standard
-///      (работает ДАЖЕ без App Group).
+///   2) лог расширения живьём по IPC (работает ДАЖЕ без App Group), пока туннель подключён.
 struct DiagnosticsView: View {
+    @EnvironmentObject var tunnel: TunnelManager
     @State private var text: String = ""
     @State private var showShare = false
+    @State private var loading = false
 
     var body: some View {
         ScrollView {
@@ -29,10 +30,10 @@ struct DiagnosticsView: View {
                     Button(role: .destructive) {
                         DiagLog.clear()
                         UserDefaults.standard.removeObject(forKey: TunnelManager.extLogKey)
-                        reload()
+                        Task { _ = await tunnel.sendCommand("clearlog") ; reload() }
                     } label: { Label("Очистить", systemImage: "trash") }
                 } label: {
-                    Image(systemName: "ellipsis.circle")
+                    Image(systemName: loading ? "ellipsis" : "ellipsis.circle")
                 }
             }
         }
@@ -43,6 +44,18 @@ struct DiagnosticsView: View {
     }
 
     private func reload() {
+        Task { await reloadAsync() }
+    }
+
+    @MainActor
+    private func reloadAsync() async {
+        loading = true
+        defer { loading = false }
+        // Живой IPC-запрос лога расширения (работает, пока сессия connecting/connected).
+        let live = await tunnel.fetchExtensionLog()
+        if !live.isEmpty {
+            UserDefaults.standard.set(live, forKey: TunnelManager.extLogKey)
+        }
         var parts: [String] = []
         let app = DiagLog.read()
         if !app.isEmpty {

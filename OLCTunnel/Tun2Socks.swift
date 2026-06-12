@@ -20,8 +20,8 @@ final class Tun2Socks {
     }
 
     func start() {
-        guard let fd = Tun2Socks.tunnelFileDescriptor() else {
-            TunnelLog.shared.log("НЕ нашёл utun fd — пакеты не пойдут", tag: "tun2socks")
+        guard let fd = resolveTunFd() else {
+            TunnelLog.shared.log("НЕ нашёл tun fd — пакеты не пойдут", tag: "tun2socks")
             return
         }
         let config = makeConfig()
@@ -65,12 +65,24 @@ final class Tun2Socks {
         """
     }
 
-    /// Находит fd utun-интерфейса, созданного NetworkExtension.
-    /// Публичного API нет; стандартный приём — перебор fd + UTUN_OPT_IFNAME.
+    /// Получение fd tun-устройства.
     ///
-    /// ВАЖНО: в расширении может быть НЕСКОЛЬКО utun (системные + наш).
-    /// Наш создаётся последним (setTunnelNetworkSettings), поэтому берём utun с
-    /// НАИБОЛЬШИМ fd и логируем все найденные, чтобы это было видно в логе.
+    /// ОСНОВНОЙ способ (как у Clash / sing-box / v2ray под iOS): берём fd напрямую
+    /// у НАШЕГО packetFlow через KVC — это точный дескриптор именно этого туннеля.
+    /// ЗАПАСНОЙ: скан utun-интерфейсов (может взять чужой, поэтому только fallback).
+    private func resolveTunFd() -> Int32? {
+        for keyPath in ["socket.fileDescriptor", "flow.socket.fileDescriptor"] {
+            if let n = packetFlow.value(forKeyPath: keyPath) as? NSNumber, n.int32Value > 0 {
+                TunnelLog.shared.log("fd из packetFlow KVC (\(keyPath)): \(n.int32Value)", tag: "tun2socks")
+                return n.int32Value
+            }
+        }
+        TunnelLog.shared.log("packetFlow KVC не дал fd — перехожу на скан utun", tag: "tun2socks")
+        return Tun2Socks.tunnelFileDescriptor()
+    }
+
+    /// Запасной способ: находит fd utun-интерфейса перебором + UTUN_OPT_IFNAME.
+    /// В расширении может быть НЕСКОЛЬКО utun (системные + наш); берём с наибольшим fd.
     static func tunnelFileDescriptor() -> Int32? {
         var buf = [CChar](repeating: 0, count: Int(IFNAMSIZ))
         let UTUN_OPT_IFNAME: Int32 = 2

@@ -88,10 +88,16 @@ final class TunnelManager: ObservableObject {
 
     /// Запросить лог расширения по IPC. Работает, пока сессия connecting/connected.
     func fetchExtensionLog() async -> String {
+        await sendCommand("getlog")
+    }
+
+    /// Отправить произвольную команду расширению по IPC и вернуть ответ строкой.
+    /// Работает, пока сессия connecting/connected (App Group не требуется).
+    func sendCommand(_ cmd: String) async -> String {
         guard let session = manager?.connection as? NETunnelProviderSession else { return "" }
         return await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
             do {
-                try session.sendProviderMessage(Data("getlog".utf8)) { resp in
+                try session.sendProviderMessage(Data(cmd.utf8)) { resp in
                     let s = resp.flatMap { String(data: $0, encoding: .utf8) } ?? ""
                     cont.resume(returning: s)
                 }
