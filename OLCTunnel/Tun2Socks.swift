@@ -67,17 +67,11 @@ final class Tun2Socks {
 
     /// Получение fd tun-устройства.
     ///
-    /// ОСНОВНОЙ способ (как у Clash / sing-box / v2ray под iOS): берём fd напрямую
-    /// у НАШЕГО packetFlow через KVC — это точный дескриптор именно этого туннеля.
-    /// ЗАПАСНОЙ: скан utun-интерфейсов (может взять чужой, поэтому только fallback).
+    /// ВАЖНО: НЕ используем packetFlow.value(forKeyPath:) — у NEPacketTunnelFlow нет
+    /// такого keyPath, и KVC бросает NSUnknownKeyException. Это Objective-C исключение,
+    /// которое Swift НЕ ловит → расширение падает при старте. Поэтому только
+    /// безопасный скан utun-интерфейсов (UTUN_OPT_IFNAME).
     private func resolveTunFd() -> Int32? {
-        for keyPath in ["socket.fileDescriptor", "flow.socket.fileDescriptor"] {
-            if let n = packetFlow.value(forKeyPath: keyPath) as? NSNumber, n.int32Value > 0 {
-                TunnelLog.shared.log("fd из packetFlow KVC (\(keyPath)): \(n.int32Value)", tag: "tun2socks")
-                return n.int32Value
-            }
-        }
-        TunnelLog.shared.log("packetFlow KVC не дал fd — перехожу на скан utun", tag: "tun2socks")
         return Tun2Socks.tunnelFileDescriptor()
     }
 

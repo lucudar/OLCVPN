@@ -115,7 +115,13 @@ final class TunnelManager: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             guard let self, let conn = self.manager?.connection else { return }
-            Task { @MainActor in self.status = conn.status }
+            Task { @MainActor in
+                self.status = conn.status
+                DiagLog.log("статус -> \(self.statusText)")
+                if let e = self.lastError, !e.isEmpty {
+                    DiagLog.log("lastError: \(e)")
+                }
+            }
         }
     }
 
