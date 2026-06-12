@@ -51,11 +51,13 @@ struct ConnectView: View {
             if tunnel.isConnected {
                 tunnel.disconnect()
             } else {
-                guard store.publishActiveToTunnel() else {
+                guard let cfg = store.activeTunnelConfig() else {
                     tunnel.lastError = "Выбери профиль и проверь ключ"
                     return
                 }
-                tunnel.connect()
+                // Резерв: дублируем в App Group (если доступен); основной путь — providerConfiguration.
+                store.publishActiveToTunnel()
+                tunnel.connect(providerConfig: cfg)
             }
         } label: {
             Text(tunnel.isConnected ? "Отключиться" : "Подключиться")

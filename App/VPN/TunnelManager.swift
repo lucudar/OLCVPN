@@ -15,14 +15,6 @@ final class TunnelManager: ObservableObject {
         do {
             let all = try await NETunnelProviderManager.loadAllFromPreferences()
             let m = all.first ?? NETunnelProviderManager()
-            let proto = (m.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
-            proto.providerBundleIdentifier = OLC.tunnelBundleId
-            proto.serverAddress = "olcRTC"
-            m.protocolConfiguration = proto
-            m.localizedDescription = "OLCVPN"
-            m.isEnabled = true
-            try await m.saveToPreferences()
-            try await m.loadFromPreferences()
             self.manager = m
             self.status = m.connection.status
             observeStatus()
@@ -32,13 +24,32 @@ final class TunnelManager: ObservableObject {
         }
     }
 
-    func connect() {
-        guard let manager else { lastError = "VPN не настроен"; return }
+    /// Подключение: записываем активный конфиг в providerConfiguration VPN-профиля
+    /// (работает без App Group), сохраняем и стартуем.
+    func connect(providerConfig: [String: Any]) {
+        lastError = nil
+        Task { await self.saveAndStart(providerConfig: providerConfig) }
+    }
+
+    private func saveAndStart(providerConfig: [String: Any]) async {
         do {
-            try manager.connection.startVPNTunnel()
-            DiagLog.log("Запрос подключения")
+            let all = try await NETunnelProviderManager.loadAllFromPreferences()
+            let m = manager ?? all.first ?? NETunnelProviderManager()
+            let proto = (m.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
+            proto.providerBundleIdentifier = OLC.tunnelBundleId
+            proto.serverAddress = "olcRTC"
+            proto.providerConfiguration = providerConfig
+            m.protocolConfiguration = proto
+            m.localizedDescription = "OLCVPN"
+            m.isEnabled = true
+            try await m.saveToPreferences()
+            try await m.loadFromPreferences()
+            self.manager = m
+            observeStatus()
+            try m.connection.startVPNTunnel()
+            DiagLog.log("Запрос подключения (providerConfiguration)")
         } catch {
-            lastError = error.localizedDescription
+            self.lastError = error.localizedDescription
             DiagLog.log("connect ошибка: \(error.localizedDescription)")
         }
     }

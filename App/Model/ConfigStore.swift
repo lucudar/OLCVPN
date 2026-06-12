@@ -1,7 +1,7 @@
 import Foundation
 import Combine
 
-/// Хранилище списка профилей и настроек (в App Group). Ключи — в Keychain по profile.id.
+/// Хранилище списка профилей и настроек (в App Group). Ключи — в KeychainHelper по profile.id.
 final class ConfigStore: ObservableObject {
     @Published var profiles: [Profile] = []
     @Published var activeProfileID: UUID?
@@ -76,7 +76,15 @@ final class ConfigStore: ObservableObject {
         profiles.first { $0.id == activeProfileID }
     }
 
-    /// Переносит активный профиль + ключ в SharedConfig для extension.
+    /// Собирает конфиг активного профиля для передачи в providerConfiguration.
+    /// nil — если нет активного профиля или ключа.
+    func activeTunnelConfig() -> [String: Any]? {
+        guard let p = activeProfile, let key = keyHex(for: p) else { return nil }
+        return SharedConfig.providerConfig(profile: p, keyHex: key, debug: settings.debugLogging)
+    }
+
+    /// Резервно переносит активный профиль + ключ в App Group для extension.
+    @discardableResult
     func publishActiveToTunnel() -> Bool {
         guard let p = activeProfile, let key = keyHex(for: p) else { return false }
         SharedConfig.saveActive(profile: p, keyHex: key, debug: settings.debugLogging)

@@ -8,15 +8,28 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func startTunnel(options: [String: NSObject]?,
                               completionHandler: @escaping (Error?) -> Void) {
-        guard let cfg = SharedConfig.loadActive() else {
-            os_log("Нет активного конфига", log: log, type: .error)
-            DiagLog.log("Нет активного профиля", tag: "tunnel")
+        // Конфиг берём СНАЧАЛА из providerConfiguration самого VPN-профиля
+        // (не требует App Group), и только потом — из App Group как резерв.
+        let providerConf = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
+        let source: String
+        let maybeCfg: ActiveConfig?
+        if let c = SharedConfig.fromProviderConfig(providerConf) {
+            maybeCfg = c
+            source = "providerConfiguration"
+        } else {
+            maybeCfg = SharedConfig.loadActive()
+            source = "appGroup"
+        }
+
+        guard let cfg = maybeCfg else {
+            os_log("Нет активного конфига (ни providerConfiguration, ни App Group)", log: log, type: .error)
+            DiagLog.log("Нет активного профиля (providerConfiguration пуст, App Group недоступен)", tag: "tunnel")
             completionHandler(NSError(domain: "olc", code: 1,
                 userInfo: [NSLocalizedDescriptionKey: "Нет активного профиля"]))
             return
         }
 
-        DiagLog.log("Старт туннеля: \(cfg.carrier)/\(cfg.transport) room=\(cfg.roomID)", tag: "tunnel")
+        DiagLog.log("Старт туннеля [\(source)]: \(cfg.carrier)/\(cfg.transport) room=\(cfg.roomID)", tag: "tunnel")
 
         // 1) Настройка ядра olcRTC
         OLCCore.setProviders()
