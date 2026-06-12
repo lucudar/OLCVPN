@@ -33,7 +33,7 @@ enum SharedConfig {
         [
             "carrier": profile.carrier.rawValue,
             "roomID": profile.roomID,
-            "clientID": profile.clientID,
+            "clientID": profile.clientID.isEmpty ? OLC.defaultClientID : profile.clientID,
             "transport": profile.transport.rawValue,
             "dns": profile.dns,
             "socksPort": profile.socksPort,
@@ -47,12 +47,13 @@ enum SharedConfig {
         guard let dict = dict,
               let carrier = dict["carrier"] as? String,
               let roomID = dict["roomID"] as? String,
-              let clientID = dict["clientID"] as? String,
               let transport = dict["transport"] as? String,
               let dns = dict["dns"] as? String,
               let socksPort = (dict["socksPort"] as? Int) ?? (dict["socksPort"] as? NSNumber)?.intValue,
               let keyHex = dict["keyHex"] as? String, !keyHex.isEmpty
         else { return nil }
+        let rawClientID = (dict["clientID"] as? String) ?? ""
+        let clientID = rawClientID.isEmpty ? OLC.defaultClientID : rawClientID
         let debug = (dict["debug"] as? Bool) ?? true
         return ActiveConfig(carrier: carrier, roomID: roomID, clientID: clientID,
                             transport: transport, dns: dns, socksPort: socksPort,
@@ -66,7 +67,7 @@ enum SharedConfig {
         let payload: [String: Any] = [
             "carrier": profile.carrier.rawValue,
             "roomID": profile.roomID,
-            "clientID": profile.clientID,
+            "clientID": profile.clientID.isEmpty ? OLC.defaultClientID : profile.clientID,
             "transport": profile.transport.rawValue,
             "dns": profile.dns,
             "socksPort": profile.socksPort,
@@ -81,12 +82,13 @@ enum SharedConfig {
         guard let dict = defaults?.dictionary(forKey: activeKey),
               let carrier = dict["carrier"] as? String,
               let roomID = dict["roomID"] as? String,
-              let clientID = dict["clientID"] as? String,
               let transport = dict["transport"] as? String,
               let dns = dict["dns"] as? String,
               let socksPort = dict["socksPort"] as? Int,
               let keyHex = KeychainHelper.get(account: keyAccount)
         else { return nil }
+        let rawClientID = (dict["clientID"] as? String) ?? ""
+        let clientID = rawClientID.isEmpty ? OLC.defaultClientID : rawClientID
         let debug = (dict["debug"] as? Bool) ?? true
         return ActiveConfig(carrier: carrier, roomID: roomID, clientID: clientID,
                             transport: transport, dns: dns, socksPort: socksPort,

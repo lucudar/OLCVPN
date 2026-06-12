@@ -72,7 +72,7 @@ enum OLCUri {
             name: note.isEmpty ? "\(carrier.rawValue)/\(transport.rawValue)" : note,
             carrier: carrier,
             roomID: roomID,
-            clientID: "",
+            clientID: OLC.defaultClientID,
             transport: transport
         )
         profile.transportParams = params

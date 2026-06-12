@@ -14,4 +14,6 @@ enum OLC {
     static let tunnelIP = "10.8.0.2"
     static let tunnelMask = "255.255.255.0"
     static let defaultDNS = "8.8.8.8"
+    /// Идентификатор клиента (peer id). Должен совпадать с серверным полем `data` — по умолчанию всегда "data".
+    static let defaultClientID = "data"
 }
