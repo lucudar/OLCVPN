@@ -2,6 +2,11 @@ import SwiftUI
 import UIKit
 
 /// Просмотр и экспорт журнала диагностики.
+///
+/// Собирает два источника:
+///   1) DiagLog (лог приложения + расширения через App Group, если доступен);
+///   2) лог расширения, забранный по IPC и сохранённый в UserDefaults.standard
+///      (работает ДАЖЕ без App Group).
 struct DiagnosticsView: View {
     @State private var text: String = ""
     @State private var showShare = false
@@ -22,7 +27,9 @@ struct DiagnosticsView: View {
                     Button { reload() } label: { Label("Обновить", systemImage: "arrow.clockwise") }
                     Button { showShare = true } label: { Label("Экспорт", systemImage: "square.and.arrow.up") }
                     Button(role: .destructive) {
-                        DiagLog.clear(); reload()
+                        DiagLog.clear()
+                        UserDefaults.standard.removeObject(forKey: TunnelManager.extLogKey)
+                        reload()
                     } label: { Label("Очистить", systemImage: "trash") }
                 } label: {
                     Image(systemName: "ellipsis.circle")
@@ -35,7 +42,17 @@ struct DiagnosticsView: View {
         }
     }
 
-    private func reload() { text = DiagLog.read() }
+    private func reload() {
+        var parts: [String] = []
+        let app = DiagLog.read()
+        if !app.isEmpty {
+            parts.append("=== ПРИЛОЖЕНИЕ / App Group ===\n" + app)
+        }
+        if let ext = UserDefaults.standard.string(forKey: TunnelManager.extLogKey), !ext.isEmpty {
+            parts.append("=== РАСШИРЕНИЕ (IPC) ===\n" + ext)
+        }
+        text = parts.joined(separator: "\n\n")
+    }
 }
 
 /// Обёртка UIActivityViewController для экспорта/шаринга.

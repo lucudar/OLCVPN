@@ -7,9 +7,17 @@ enum DiagLog {
     private static let maxBytes = 256 * 1024
 
     private static var fileURL: URL? {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: OLC.appGroup)?
-            .appendingPathComponent(fileName)
+        if let group = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: OLC.appGroup) {
+            return group.appendingPathComponent(fileName)
+        }
+        // App Group недоступен (например, сертификат без группы) — пишем в
+        // Documents текущего процесса, чтобы лог хотя бы сохранялся локально.
+        if let docs = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask).first {
+            return docs.appendingPathComponent(fileName)
+        }
+        return nil
     }
 
     static func log(_ message: String, tag: String = "app") {

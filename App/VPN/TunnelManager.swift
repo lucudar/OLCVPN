@@ -7,9 +7,15 @@ import Combine
 final class TunnelManager: ObservableObject {
     @Published var status: NEVPNStatus = .invalid
     @Published var lastError: String?
+    /// Живой снимок in-memory лога расширения (через IPC). Также сохраняется в
+    /// UserDefaults.standard (\"olc.ext.log\") и виден на экране диагностики.
+    @Published var extensionLog: String = ""
+
+    static let extLogKey = "olc.ext.log"
 
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
+    private var logPollTask: Task<Void, Never>?
 
     func prepare() async {
         do {
@@ -48,6 +54,7 @@ final class TunnelManager: ObservableObject {
             observeStatus()
             try m.connection.startVPNTunnel()
             DiagLog.log("Запрос подключения (providerConfiguration)")
+            startLogPolling()
         } catch {
             self.lastError = error.localizedDescription
             DiagLog.log("connect ошибка: \(error.localizedDescription)")
@@ -57,6 +64,41 @@ final class TunnelManager: ObservableObject {
     func disconnect() {
         manager?.connection.stopVPNTunnel()
         DiagLog.log("Запрос отключения")
+    }
+
+    // MARK: - Лог расширения по IPC (работает без App Group)
+
+    /// Опрашиваем in-memory лог расширения ~25с (покрывает окно waitReady=15с),
+    /// чтобы успеть забрать логи ДО того, как расширение умрёт при ошибке.
+    func startLogPolling() {
+        logPollTask?.cancel()
+        logPollTask = Task { [weak self] in
+            guard let self else { return }
+            for _ in 0..<50 {
+                if Task.isCancelled { return }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+                let dump = await self.fetchExtensionLog()
+                if !dump.isEmpty {
+                    self.extensionLog = dump
+                    UserDefaults.standard.set(dump, forKey: TunnelManager.extLogKey)
+                }
+            }
+        }
+    }
+
+    /// Запросить лог расширения по IPC. Работает, пока сессия connecting/connected.
+    func fetchExtensionLog() async -> String {
+        guard let session = manager?.connection as? NETunnelProviderSession else { return "" }
+        return await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
+            do {
+                try session.sendProviderMessage(Data("getlog".utf8)) { resp in
+                    let s = resp.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                    cont.resume(returning: s)
+                }
+            } catch {
+                cont.resume(returning: "")
+            }
+        }
     }
 
     private func observeStatus() {
