@@ -22,7 +22,7 @@ struct ProxyTestView: View {
 
                     Text(proxy.status)
                         .font(.headline)
-                        .foregroundStyle(proxy.running ? .green : .secondary)
+                        .foregroundStyle(proxy.running ? Color.green : Color.secondary)
 
                     if let tr = proxy.testResult {
                         Text(tr)
