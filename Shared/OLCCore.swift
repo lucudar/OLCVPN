@@ -2,13 +2,17 @@ import Foundation
 import Olcrtc   // <- модуль из Olcrtc.xcframework (gomobile bind)
 
 /// ЕДИНСТВЕННОЕ место, где мы касаемся gomobile-символов.
+///
+/// gomobile префиксует экспорты именем фреймворка. При `-o Olcrtc.xcframework`
+/// функции обычно имеют вид `OlcrtcStart`, `OlcrtcWaitReady`, и т.д.
+/// ЕСЛИ префикс в сгенерированном заголовке иной — поправь только здесь.
 enum OLCCore {
     static func setProviders() { MobileSetProviders() }
     static func setTransport(_ t: String) { MobileSetTransport(t) }
     static func setDNS(_ dns: String) { MobileSetDNS(dns) }
     static func setDebug(_ on: Bool) { MobileSetDebug(on) }
 
-    /// gomobile мапит `func Start(...) error` в свободную C-функцию
+    /// Запуск ядра. gomobile мапит `func Start(...) error` в свободную C-функцию
     /// `BOOL MobileStart(..., NSError** error)` — ошибку обрабатываем вручную.
     static func start(carrier: String, roomID: String, clientID: String,
                       keyHex: String, socksPort: Int,
@@ -22,6 +26,7 @@ enum OLCCore {
         }
     }
 
+    /// Блокирует до готовности SOCKS5 либо кидает ошибку.
     static func waitReady(timeoutMillis: Int) throws {
         var err: NSError?
         let ok = MobileWaitReady(timeoutMillis, &err)
@@ -46,6 +51,7 @@ enum OLCCore {
         return ret
     }
 
+    /// Прокидывает логи ядра в переданный обработчик.
     static func setLogWriter(_ writer: MobileLogWriterProtocol) {
         MobileSetLogWriter(writer)
     }
