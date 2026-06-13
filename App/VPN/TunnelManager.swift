@@ -16,6 +16,8 @@ final class TunnelManager: ObservableObject {
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
     private var logPollTask: Task<Void, Never>?
+    /// Момент запроса подключения — для тайминга переходов статуса.
+    private var connectStartedAt: Date?
 
     func prepare() async {
         do {
@@ -34,6 +36,8 @@ final class TunnelManager: ObservableObject {
     /// (работает без App Group), сохраняем и стартуем.
     func connect(providerConfig: [String: Any]) {
         lastError = nil
+        connectStartedAt = Date()
+        DiagLog.log("App Group: \(DiagLog.appGroupAvailable() ? "доступен" : "НЕДОСТУПЕН (логи расширения не дойдут до приложения)") | лог -> \(DiagLog.storageLocation())")
         Task { await self.saveAndStart(providerConfig: providerConfig) }
     }
 
@@ -117,7 +121,9 @@ final class TunnelManager: ObservableObject {
             guard let self, let conn = self.manager?.connection else { return }
             Task { @MainActor in
                 self.status = conn.status
-                DiagLog.log("статус -> \(self.statusText)")
+                let ms = self.connectStartedAt.map { Int(Date().timeIntervalSince($0) * 1000) }
+                let suffix = ms.map { " (+\($0)мс)" } ?? ""
+                DiagLog.log("статус -> \(self.statusText)\(suffix)")
                 if let e = self.lastError, !e.isEmpty {
                     DiagLog.log("lastError: \(e)")
                 }

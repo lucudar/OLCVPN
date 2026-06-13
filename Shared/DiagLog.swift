@@ -47,6 +47,19 @@ enum DiagLog {
         try? Data().write(to: url)
     }
 
+    /// Доступен ли общий контейнер App Group. Если нет (частая ситуация при
+    /// подписи через ESign без зарегистрированной группы), приложение и расширение
+    /// пишут в РАЗНЫЕ приватные Documents и НЕ видят логи друг друга.
+    static func appGroupAvailable() -> Bool {
+        FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: OLC.appGroup) != nil
+    }
+
+    /// Куда реально пишется лог текущего процесса.
+    static func storageLocation() -> String {
+        appGroupAvailable() ? "AppGroup" : "Documents(fallback)"
+    }
+
     private static func trimIfNeeded() {
         guard let url = fileURL,
               let attrs = try? FileManager.default.attributesOfItem(atPath: url.path),
