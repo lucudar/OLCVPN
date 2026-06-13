@@ -26,6 +26,17 @@ final class ProxyManager: ObservableObject {
         ui { self.log.append(line) }
     }
 
+    /// Строка внутреннего лога ядра ([pc]/[ice]/jitsi/smux), перехваченная
+    /// со stderr. ВАЖНО: не вызываем DiagLog/NSLog — иначе будет петля
+    /// (NSLog пишет в stderr, который мы же и перехватываем).
+    private func appendCore(_ s: String) {
+        let line = "[core] \(s)"
+        ui {
+            self.log.append(line)
+            if self.log.count > 1200 { self.log.removeFirst(self.log.count - 1200) }
+        }
+    }
+
     private static func ts() -> String {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
@@ -37,6 +48,11 @@ final class ProxyManager: ObservableObject {
     /// Запуск ядра в приложении.
     func start(profile: Profile, keyHex: String, debug: Bool) {
         guard !busy && !running else { return }
+        // Перехватываем внутренние логи ядра (stderr) ДО запуска, чтобы
+        // видеть [pc]/[ice]/smux прямо в логе приложения.
+        CoreLogCapture.shared.start { [weak self] line in
+            self?.appendCore(line)
+        }
         activeSocksPort = profile.socksPort
         ui {
             self.busy = true
