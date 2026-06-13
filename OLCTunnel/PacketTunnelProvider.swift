@@ -55,9 +55,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 try OLCCore.start(carrier: cfg.carrier, roomID: cfg.roomID,
                                   clientID: cfg.clientID, keyHex: cfg.keyHex,
                                   socksPort: cfg.socksPort)
-                TunnelLog.shared.log("MobileStart OK за \(self.ms(t0: s1)) мс. Жду готовности (waitReady, таймаут 15000 мс)…")
+                TunnelLog.shared.log("MobileStart OK за \(self.ms(t0: s1)) мс. Жду готовности (waitReady, таймаут 40000 мс)…")
                 let s2 = Date()
-                try OLCCore.waitReady(timeoutMillis: 15000)
+                try OLCCore.waitReady(timeoutMillis: 40000)
                 TunnelLog.shared.log("waitReady OK за \(self.ms(t0: s2)) мс — ядро готово, SOCKS поднят")
             } catch {
                 TunnelLog.shared.log("ОШИБКА ядра (\(self.ms(t0: t0)) мс): \(error.localizedDescription)")

@@ -21,8 +21,12 @@ enum DiagLog {
     }
 
     static func log(_ message: String, tag: String = "app") {
-        guard let url = fileURL else { return }
         let ts = ISO8601DateFormatter().string(from: Date())
+        // Дублируем в системный журнал iOS. Его видно через idevicesyslog /
+        // Console ДАЖЕ когда App Group недоступен (например при подписи ESign).
+        // Фильтруй по префиксу OLCVPN.
+        NSLog("%@", "[OLCVPN] [\(ts)] [\(tag)] \(message)")
+        guard let url = fileURL else { return }
         let line = "[\(ts)] [\(tag)] \(message)\n"
         let data = Data(line.utf8)
         if let handle = try? FileHandle(forWritingTo: url) {
@@ -45,19 +49,6 @@ enum DiagLog {
     static func clear() {
         guard let url = fileURL else { return }
         try? Data().write(to: url)
-    }
-
-    /// Доступен ли общий контейнер App Group. Если нет (частая ситуация при
-    /// подписи через ESign без зарегистрированной группы), приложение и расширение
-    /// пишут в РАЗНЫЕ приватные Documents и НЕ видят логи друг друга.
-    static func appGroupAvailable() -> Bool {
-        FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: OLC.appGroup) != nil
-    }
-
-    /// Куда реально пишется лог текущего процесса.
-    static func storageLocation() -> String {
-        appGroupAvailable() ? "AppGroup" : "Documents(fallback)"
     }
 
     private static func trimIfNeeded() {
