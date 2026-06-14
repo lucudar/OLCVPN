@@ -1,4 +1,4 @@
-import Foundation
+﻿import Foundation
 import Combine
 import Darwin
 
@@ -29,10 +29,13 @@ final class ProxyManager: ObservableObject {
     /// Строка внутреннего лога ядра ([pc]/[ice]/jitsi/smux), перехваченная
     /// со stderr. ВАЖНО: не вызываем DiagLog/NSLog — иначе будет петля
     /// (NSLog пишет в stderr, который мы же и перехватываем).
-    private func appendCore(_ s: String) {
-        let line = "[core] \(s)"
+    private var coreLogWriter: CoreLogWriter?
+
+    private func appendCore(_ raw: String) {
+        let parts = raw.split(whereSeparator: { $0 == "\n" || $0 == "\r" })
+        guard !parts.isEmpty else { return }
         ui {
-            self.log.append(line)
+            for p in parts { self.log.append("[core] " + String(p)) }
             if self.log.count > 1200 { self.log.removeFirst(self.log.count - 1200) }
         }
     }
@@ -50,9 +53,9 @@ final class ProxyManager: ObservableObject {
         guard !busy && !running else { return }
         // Перехватываем внутренние логи ядра (stderr) ДО запуска, чтобы
         // видеть [pc]/[ice]/smux прямо в логе приложения.
-        CoreLogCapture.shared.start { [weak self] line in
-            self?.appendCore(line)
-        }
+        let writer = CoreLogWriter { [weak self] line in self?.appendCore(line) }
+        coreLogWriter = writer
+        OLCCore.setLogWriter(writer)
         activeSocksPort = profile.socksPort
         ui {
             self.busy = true
