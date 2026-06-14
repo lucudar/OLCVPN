@@ -23,7 +23,8 @@ final class CoreLogWriter: NSObject, MobileLogWriterProtocol {
 
     /// Вызывается ядром (через logBridge.Write) на каждый log.Print.
     /// msg обычно содержит префикс даты/времени Go-лога и хвостовой \n.
-    func writeLog(_ msg: String) {
+    func writeLog(_ msg: String?) {
+        guard let msg, !msg.isEmpty else { return }
         handler(msg)
     }
 }
