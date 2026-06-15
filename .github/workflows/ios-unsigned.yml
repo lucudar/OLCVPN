@@ -1,11 +1,5 @@
 name: iOS Build (Unsigned)
 
-# Builds an UNSIGNED .ipa - no Apple certificates or profiles required.
-# You sign it yourself on your phone/PC (AltStore, Sideloadly, ESign, etc.).
-# The .ipa is published as a GitHub Release asset (not an Actions artifact),
-# so it does NOT use the Actions artifact storage quota.
-# Run: Actions tab -> "iOS Build (Unsigned)" -> Run workflow.
-
 on:
   workflow_dispatch:
   push:
@@ -32,12 +26,61 @@ jobs:
       - name: Clone olcRTC core
         run: git clone --depth 1 https://github.com/openlibrecommunity/olcrtc.git "$RUNNER_TEMP/olcrtc"
 
+      - name: Patch olcRTC (clean datachannel - recvonly video, no VP8 keepalive)
+        run: |
+          python3 - "$RUNNER_TEMP/olcrtc/internal/engine/jitsi/jitsi.go" <<'PY'
+          import sys
+          path = sys.argv[1]
+          src = open(path, encoding="utf-8").read()
+
+          sig = "func (s *Session) addVideoOrKeepaliveTrack(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, error) {"
+          i = src.find(sig)
+          if i == -1:
+              sys.exit("PATCH FAILED: signature not found - paste build.sh, the source layout differs")
+
+          brace_start = src.index("{", i)
+          depth = 0
+          j = brace_start
+          while j < len(src):
+              c = src[j]
+              if c == "{":
+                  depth += 1
+              elif c == "}":
+                  depth -= 1
+                  if depth == 0:
+                      break
+              j += 1
+          if depth != 0:
+              sys.exit("PATCH FAILED: unbalanced braces")
+
+          new_func = '''func (s *Session) addVideoOrKeepaliveTrack(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, error) {
+          	// Clean datachannel: present the video m-line as recvonly only. A sendonly
+          	// local track makes pion emit a primary+RTX SSRC FID group, but the j
+          	// library declares only the primary as a <source>, so modern Jicofo rejects
+          	// session-accept ("An SSRC group contains an SSRC, which hasn't been
+          	// signaled as a source"). On a direct-UDP path JVB liveness is held by ICE
+          	// consent + the SCTP bridge keepalive, so the VP8 keepalive is not needed.
+          	if _, err := pc.AddTransceiverFromKind(
+          		webrtc.RTPCodecTypeVideo,
+          		webrtc.RTPTransceiverInit{Direction: webrtc.RTPTransceiverDirectionRecvonly},
+          	); err != nil {
+          		return nil, fmt.Errorf("add video recvonly: %w", err)
+          	}
+          	return nil, nil //nolint:nilnil // nil track signals no keepalive needed
+          }'''
+
+          open(path, "w", encoding="utf-8").write(src[:i] + new_func + src[j+1:])
+          print("PATCH OK: addVideoOrKeepaliveTrack -> recvonly, no keepalive")
+          PY
+          gofmt -w "$RUNNER_TEMP/olcrtc/internal/engine/jitsi/jitsi.go"
+          echo "==== patched function ===="
+          sed -n '/func (s \*Session) addVideoOrKeepaliveTrack/,/^}/p' "$RUNNER_TEMP/olcrtc/internal/engine/jitsi/jitsi.go"
+
       - name: Build frameworks + generate Xcode project
         run: |
           chmod +x build.sh
           ./build.sh "$RUNNER_TEMP/olcrtc"
 
-      # ---- BUILD WITHOUT CODE SIGNING ----
       - name: Archive (no code signing)
         run: |
           xcodebuild -project OLCVPN.xcodeproj \
