@@ -1,3 +1,18 @@
+# fix-olcvpn-unsigned.ps1  -- run from the root of the OLCVPN repo
+$ErrorActionPreference = 'Stop'
+
+$wfDir = Join-Path (Get-Location) ".github\workflows"
+if (-not (Test-Path $wfDir)) { throw "No .github\workflows here. Run from the OLCVPN repo root." }
+
+# the unsigned workflow is the only one containing OLCVPN-unsigned
+$target = Get-ChildItem $wfDir -Recurse -Include *.yml,*.yaml -File |
+    Where-Object { (Get-Content $_.FullName -Raw) -match 'OLCVPN-unsigned' } |
+    Select-Object -First 1
+if (-not $target) { throw "Unsigned workflow not found (no OLCVPN-unsigned) in $wfDir." }
+
+Copy-Item $target.FullName "$($target.FullName).bak" -Force
+
+$yaml = @'
 name: iOS Build (Unsigned)
 
 # Builds an UNSIGNED .ipa - sign it yourself (AltStore / Sideloadly / ESign).
@@ -74,3 +89,15 @@ jobs:
           name: OLCVPN (unsigned)
           body: Unsigned OLCVPN .ipa. Sign it yourself (AltStore / Sideloadly / ESign).
           files: export/OLCVPN-unsigned.ipa
+'@
+
+$yaml = $yaml -replace "`r`n", "`n"   # LF endings
+[System.IO.File]::WriteAllText($target.FullName, $yaml, (New-Object System.Text.UTF8Encoding($false)))  # UTF-8 no BOM
+
+Write-Host ("OK -> " + $target.FullName)
+Write-Host ("Backup -> " + $target.FullName + ".bak")
+Write-Host ""
+Write-Host "Next:"
+Write-Host "  git add ."
+Write-Host "  git commit -m ""ci: keepalive without rtx (clean datachannel)"""
+Write-Host "  git push"

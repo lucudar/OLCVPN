@@ -1,6 +1,11 @@
 name: iOS Build (Unsigned)
 
-# Builds an UNSIGNED .ipa - sign it yourself (AltStore / Sideloadly / ESign).
+# Builds an UNSIGNED .ipa - no Apple certificates or profiles required.
+# You sign it yourself on your phone/PC (AltStore, Sideloadly, ESign, etc.).
+# The .ipa is published as a GitHub Release asset (not an Actions artifact),
+# so it does NOT use the Actions artifact storage quota.
+# Run: Actions tab -> "iOS Build (Unsigned)" -> Run workflow.
+
 on:
   workflow_dispatch:
   push:
@@ -27,18 +32,12 @@ jobs:
       - name: Clone olcRTC core
         run: git clone --depth 1 https://github.com/openlibrecommunity/olcrtc.git "$RUNNER_TEMP/olcrtc"
 
-      - name: Patch olcRTC (keepalive without RTX)
-        run: |
-          F="$RUNNER_TEMP/olcrtc/internal/engine/jitsi/jitsi.go"
-          perl -0777 -i -pe 's/api := webrtc\.NewAPI\(\s*webrtc\.WithSettingEngine\(settings\),\s*webrtc\.WithInterceptorRegistry\(registry\),\s*\)/mediaEngine := \&webrtc.MediaEngine{}\n\tif err := mediaEngine.RegisterCodec(webrtc.RTPCodecParameters{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeOpus, ClockRate: 48000, Channels: 2, SDPFmtpLine: "minptime=10;useinbandfec=1"}, PayloadType: 111}, webrtc.RTPCodecTypeAudio); err != nil {\n\t\treturn fmt.Errorf("register opus: %w", err)\n\t}\n\tif err := mediaEngine.RegisterCodec(webrtc.RTPCodecParameters{RTPCodecCapability: webrtc.RTPCodecCapability{MimeType: webrtc.MimeTypeVP8, ClockRate: 90000}, PayloadType: 100}, webrtc.RTPCodecTypeVideo); err != nil {\n\t\treturn fmt.Errorf("register vp8: %w", err)\n\t}\n\tapi := webrtc.NewAPI(webrtc.WithMediaEngine(mediaEngine), webrtc.WithSettingEngine(settings), webrtc.WithInterceptorRegistry(registry))/s' "$F"
-          gofmt -w "$F"
-          grep -q 'WithMediaEngine(mediaEngine)' "$F" && echo "PATCH OK: media engine without rtx" || { echo "PATCH FAILED: anchor not found"; exit 1; }
-
       - name: Build frameworks + generate Xcode project
         run: |
           chmod +x build.sh
           ./build.sh "$RUNNER_TEMP/olcrtc"
 
+      # ---- BUILD WITHOUT CODE SIGNING ----
       - name: Archive (no code signing)
         run: |
           xcodebuild -project OLCVPN.xcodeproj \
