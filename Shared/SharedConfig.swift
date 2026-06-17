@@ -15,6 +15,7 @@ struct ActiveConfig: Codable {
     var socksPort: Int
     var keyHex: String
     var debug: Bool
+    var whitelist: [String] = []
 }
 
 enum SharedConfig {
@@ -30,7 +31,7 @@ enum SharedConfig {
     /// Собирает словарь для `NETunnelProviderProtocol.providerConfiguration`.
     /// Все значения plist-сериализуемы (String/Int/Bool).
     static func providerConfig(profile: Profile, keyHex: String, debug: Bool) -> [String: Any] {
-        [
+        var dict: [String: Any] = [
             "carrier": profile.carrier.rawValue,
             "roomID": profile.roomID,
             "clientID": profile.clientID.isEmpty ? OLC.defaultClientID : profile.clientID,
@@ -40,6 +41,10 @@ enum SharedConfig {
             "keyHex": keyHex,
             "debug": debug
         ]
+        if !profile.whitelist.isEmpty {
+            dict["whitelist"] = profile.whitelist
+        }
+        return dict
     }
 
     /// Читает конфиг из providerConfiguration (вызывается из extension первым делом).
@@ -52,8 +57,6 @@ enum SharedConfig {
               let socksPort = (dict["socksPort"] as? Int) ?? (dict["socksPort"] as? NSNumber)?.intValue,
               let keyHex = dict["keyHex"] as? String, !keyHex.isEmpty
         else {
-            // Распишем, чего именно не хватило — основной источник «connect падает
-            // с нет профиля», и раньше было непонятно, какое поле отвалилось.
             let keys = dict?.keys.sorted().joined(separator: ",") ?? "nil"
             DiagLog.error("fromProviderConfig: не хватает обязательных полей (есть: \(keys))", tag: "config")
             return nil
@@ -61,10 +64,11 @@ enum SharedConfig {
         let rawClientID = (dict["clientID"] as? String) ?? ""
         let clientID = rawClientID.isEmpty ? OLC.defaultClientID : rawClientID
         let debug = (dict["debug"] as? Bool) ?? true
-        DiagLog.debug("fromProviderConfig OK: carrier=\(carrier) transport=\(transport) room=\(roomID) socksPort=\(socksPort) keyLen=\(keyHex.count)", tag: "config")
+        let whitelist = (dict["whitelist"] as? [String]) ?? []
+        DiagLog.debug("fromProviderConfig OK: carrier=\(carrier) transport=\(transport) room=\(roomID) socksPort=\(socksPort) keyLen=\(keyHex.count) whitelist=\(whitelist.count)", tag: "config")
         return ActiveConfig(carrier: carrier, roomID: roomID, clientID: clientID,
                             transport: transport, dns: dns, socksPort: socksPort,
-                            keyHex: keyHex, debug: debug)
+                            keyHex: keyHex, debug: debug, whitelist: whitelist)
     }
 
     // MARK: - App Group (резервный путь)
@@ -78,11 +82,12 @@ enum SharedConfig {
             "transport": profile.transport.rawValue,
             "dns": profile.dns,
             "socksPort": profile.socksPort,
-            "debug": debug
+            "debug": debug,
+            "whitelist": profile.whitelist
         ]
         defaults?.set(payload, forKey: activeKey)
         KeychainHelper.set(keyHex, account: keyAccount)
-        DiagLog.debug("saveActive (App Group): carrier=\(profile.carrier.rawValue) room=\(profile.roomID) socksPort=\(profile.socksPort) keyLen=\(keyHex.count)", tag: "config")
+        DiagLog.debug("saveActive (App Group): carrier=\(profile.carrier.rawValue) room=\(profile.roomID) socksPort=\(profile.socksPort) keyLen=\(keyHex.count) whitelist=\(profile.whitelist.count)", tag: "config")
     }
 
     /// Прочитать активный конфиг из App Group (резерв, если providerConfiguration пуст).
@@ -95,18 +100,16 @@ enum SharedConfig {
               let socksPort = dict["socksPort"] as? Int,
               let keyHex = KeychainHelper.get(account: keyAccount)
         else {
-            // Резервный путь молча возвращает nil — это нормально, если
-            // конфиг идёт через providerConfiguration. Логируем как debug,
-            // чтобы не шуметь в штатном сценарии.
             DiagLog.debug("loadActive (App Group): конфиг/ключ отсутствуют (возможно, идём через providerConfiguration)", tag: "config")
             return nil
         }
         let rawClientID = (dict["clientID"] as? String) ?? ""
         let clientID = rawClientID.isEmpty ? OLC.defaultClientID : rawClientID
         let debug = (dict["debug"] as? Bool) ?? true
-        DiagLog.debug("loadActive (App Group) OK: carrier=\(carrier) transport=\(transport) room=\(roomID) socksPort=\(socksPort) keyLen=\(keyHex.count)", tag: "config")
+        let whitelist = (dict["whitelist"] as? [String]) ?? []
+        DiagLog.debug("loadActive (App Group) OK: carrier=\(carrier) transport=\(transport) room=\(roomID) socksPort=\(socksPort) keyLen=\(keyHex.count) whitelist=\(whitelist.count)", tag: "config")
         return ActiveConfig(carrier: carrier, roomID: roomID, clientID: clientID,
                             transport: transport, dns: dns, socksPort: socksPort,
-                            keyHex: keyHex, debug: debug)
+                            keyHex: keyHex, debug: debug, whitelist: whitelist)
     }
 }

@@ -10,8 +10,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         TunnelLog.shared.clear()
         TunnelLog.shared.log("=== startTunnel вызван ===")
 
-        // Конфиг берём СНАЧАЛА из providerConfiguration (не требует App Group),
-        // и только потом — из App Group как резерв.
         let providerConf = (protocolConfiguration as? NETunnelProviderProtocol)?.providerConfiguration
         let keys = providerConf?.keys.sorted().joined(separator: ",") ?? "nil"
         TunnelLog.shared.log("providerConfiguration ключи: \(keys)")
@@ -34,24 +32,13 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             return
         }
 
-        TunnelLog.shared.log("Конфиг [\(source)]: carrier=\(cfg.carrier) transport=\(cfg.transport) room=\(cfg.roomID) clientID='\(cfg.clientID)' dns=\(cfg.dns) socksPort=\(cfg.socksPort) keyLen=\(cfg.keyHex.count) debugProfile=\(cfg.debug)")
+        TunnelLog.shared.log("Конфиг [\(source)]: carrier=\(cfg.carrier) transport=\(cfg.transport) room=\(cfg.roomID) clientID='\(cfg.clientID)' dns=\(cfg.dns) socksPort=\(cfg.socksPort) keyLen=\(cfg.keyHex.count) debugProfile=\(cfg.debug) whitelist=\(cfg.whitelist.count)")
 
-        // Подробность логов ядра/конфига в extension задаётся полем debug
-        // конфига (приходит через providerConfiguration из настроек приложения).
         DiagLog.debugEnabled = cfg.debug
 
-        // Старт ядра — в ФОНОВОМ потоке, чтобы очередь расширения оставалась
-        // отзывчивой (иначе handleAppMessage/IPC не отвечает, пока висит waitReady).
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
 
-            // 0) Подключаем capture логов ядра olcRTC ДО старта, иначе
-            // ранние строки [pc]/[ice]/jitsi/smux (в т.ч. ошибки инициализации)
-            // уйдут в stderr, который iOS у extension не показывает, и мы их
-            // потеряем. Ядро пишет лог двумя путями:
-            //   - Go-пакет `log` -> SetLogWriter -> CoreLogWriter (основной канал);
-            //   - прямой вывод в stderr (fmt.Print и пр.) -> CoreLogCapture.
-            // Зеркалим оба в TunnelLog, чтобы видеть в IPC-дампе и в DiagnosticsView.
             CoreLogCapture.shared.start { line in
                 TunnelLog.shared.log(line, tag: "core")
             }
@@ -60,14 +47,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             })
             TunnelLog.shared.log("Capture логов ядра подключен (stderr + log.SetOutput)")
 
-            // 1) Настройка ядра olcRTC. На время диагностики всегда debug=true.
             OLCCore.setProviders()
             OLCCore.setTransport(cfg.transport)
             OLCCore.setDNS(cfg.dns)
             OLCCore.setDebug(true)
             TunnelLog.shared.log("Ядро сконфигурировано (transport=\(cfg.transport), dns=\(cfg.dns), debug=true)")
 
-            // 2) Запуск SOCKS5 ядра
             do {
                 let s1 = Date()
                 TunnelLog.shared.log("MobileStart…")
@@ -84,7 +69,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
 
-            // 3) Сетевые настройки туннеля
+            // Сетевые настройки туннеля
             let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
             let ipv4 = NEIPv4Settings(addresses: [OLC.tunnelIP], subnetMasks: [OLC.tunnelMask])
             ipv4.includedRoutes = [NEIPv4Route.default()]
@@ -92,7 +77,17 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             let dnsHost = cfg.dns.split(separator: ":").first.map(String.init) ?? OLC.defaultDNS
             settings.dnsSettings = NEDNSSettings(servers: [dnsHost])
             settings.mtu = 1500
-            TunnelLog.shared.log("Применяю сетевые настройки (dns=\(dnsHost), mtu=1500, default route)…")
+
+            // Белый список: резолвим домены → IP, добавляем excludedRoutes
+            if !cfg.whitelist.isEmpty {
+                let excludedRoutes = self.resolveWhitelist(cfg.whitelist)
+                if !excludedRoutes.isEmpty {
+                    ipv4.excludedRoutes = excludedRoutes
+                    TunnelLog.shared.log("Белый список: \(excludedRoutes.count) маршрутов исключено из туннеля")
+                }
+            }
+
+            TunnelLog.shared.log("Применяю сетевые настройки (dns=\(dnsHost), mtu=1500, default route, excluded=\(ipv4.excludedRoutes?.count ?? 0))…")
 
             self.setTunnelNetworkSettings(settings) { [weak self] error in
                 guard let self else { return }
@@ -101,7 +96,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                     completionHandler(error)
                     return
                 }
-                // 4) tun2socks: packetFlow <-> 127.0.0.1:socksPort
                 if let fd = Tun2Socks.tunnelFileDescriptor() {
                     TunnelLog.shared.log("utun fd найден: \(fd)")
                 } else {
@@ -127,12 +121,6 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         completionHandler()
     }
 
-    /// Человекочитаемая расшифровка NEProviderStopReason для лога.
-    ///
-    /// Перечислены только кейсы, стабильно присутствующие в NetworkExtension SDK
-    /// (Xcode 15+). Список кейсов менялся между версиями SDK, поэтому остальные
-    /// значения (включая новые) уходят в @unknown default с числовым rawValue —
-    /// это безопасно и не ломает сборку при обновлении Xcode.
     private static func reasonText(_ reason: NEProviderStopReason) -> String {
         switch reason {
         case .none: return "none"
@@ -163,11 +151,121 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             TunnelLog.shared.clear()
             completionHandler?(Data("ok".utf8))
         default:
-            // Простой ping/health канал от app -> extension
             let running = OLCCore.isRunning()
             completionHandler?(Data([running ? 1 : 0]))
         }
     }
 
     private func ms(t0: Date) -> Int { Int(Date().timeIntervalSince(t0) * 1000) }
+
+    // MARK: - Белый список
+
+    /// Резолвит записи белого списка (домены, IP, CIDR) в массив NEIPv4Route для excludedRoutes.
+    /// Каждый резолвинг ограничен 2 секундами; максимум 50 IP на домен.
+    private func resolveWhitelist(_ entries: [String]) -> [NEIPv4Route] {
+        var routes: [NEIPv4Route] = []
+        var seen = Set<String>()
+
+        for entry in entries {
+            let trimmed = entry.trimmingCharacters(in: .whitespaces).lowercased()
+            guard !trimmed.isEmpty else { continue }
+
+            if trimmed.contains("/") {
+                // CIDR-нотация (например 192.168.0.0/16)
+                if let route = parseCIDR(trimmed), !seen.contains(routeKey(route)) {
+                    seen.insert(routeKey(route))
+                    routes.append(route)
+                    TunnelLog.shared.log("whitelist CIDR: \(trimmed)")
+                }
+            } else if isValidIPv4(trimmed) {
+                // Одиночный IP → /32
+                let route = NEIPv4Route(destinationAddress: trimmed, subnetMask: "255.255.255.255")
+                if !seen.contains(routeKey(route)) {
+                    seen.insert(routeKey(route))
+                    routes.append(route)
+                    TunnelLog.shared.log("whitelist IP: \(trimmed)")
+                }
+            } else {
+                // Домен — резолвим через getaddrinfo
+                let ips = resolveDNS(trimmed)
+                var count = 0
+                for ip in ips where count < 50 {
+                    let route = NEIPv4Route(destinationAddress: ip, subnetMask: "255.255.255.255")
+                    if !seen.contains(routeKey(route)) {
+                        seen.insert(routeKey(route))
+                        routes.append(route)
+                        count += 1
+                    }
+                }
+                TunnelLog.shared.log("whitelist DNS: \(trimmed) → \(count) IP")
+            }
+        }
+
+        return routes
+    }
+
+    private func parseCIDR(_ cidr: String) -> NEIPv4Route? {
+        let parts = cidr.split(separator: "/")
+        guard parts.count == 2,
+              isValidIPv4(String(parts[0])),
+              let prefix = Int(parts[1]),
+              prefix >= 0, prefix <= 32
+        else { return nil }
+
+        let maskValue = prefix == 0 ? UInt32(0) : UInt32.max << (32 - prefix)
+        let mask = String(format: "%d.%d.%d.%d",
+                          (maskValue >> 24) & 0xFF,
+                          (maskValue >> 16) & 0xFF,
+                          (maskValue >> 8) & 0xFF,
+                          maskValue & 0xFF)
+        return NEIPv4Route(destinationAddress: String(parts[0]), subnetMask: mask)
+    }
+
+    private func isValidIPv4(_ s: String) -> Bool {
+        let parts = s.split(separator: ".")
+        guard parts.count == 4 else { return false }
+        return parts.allSatisfy { Int($0).map { $0 >= 0 && $0 <= 255 } ?? false }
+    }
+
+    private func resolveDNS(_ hostname: String) -> [String] {
+        var hints = addrinfo(
+            ai_flags: 0,
+            ai_family: AF_INET,
+            ai_socktype: SOCK_STREAM,
+            ai_protocol: IPPROTO_TCP,
+            ai_addrlen: 0,
+            ai_canonname: nil,
+            ai_addr: nil,
+            ai_next: nil
+        )
+        var result: UnsafeMutablePointer<addrinfo>?
+
+        let status = getaddrinfo(hostname, nil, &hints, &result)
+        guard status == 0, let head = result else {
+            TunnelLog.shared.log("whitelist DNS: \(hostname) — ошибка резолвинга (status=\(status))")
+            return []
+        }
+        defer { freeaddrinfo(head) }
+
+        var ips: [String] = []
+        var current: UnsafeMutablePointer<addrinfo>? = head
+        while let node = current {
+            if node.pointee.ai_family == AF_INET, let aiAddr = node.pointee.ai_addr {
+                var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                aiAddr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { sin in
+                    inet_ntop(AF_INET, &sin.pointee.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN))
+                }
+                let ip = String(cString: buf)
+                if !ip.isEmpty {
+                    ips.append(ip)
+                }
+            }
+            current = node.pointee.ai_next
+        }
+        return ips
+    }
+
+    private func routeKey(_ route: NEIPv4Route) -> String {
+        "\(route.destinationAddress)/\(route.destinationSubnetMask)"
+    }
 }

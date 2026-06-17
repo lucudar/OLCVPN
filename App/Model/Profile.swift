@@ -43,6 +43,8 @@ struct Profile: Codable, Identifiable, Equatable {
     var transportParams: [String: String] = [:]
     /// Комментарий из MIMO-поля olcrtc://.
     var note: String = ""
+    /// Белый список: домены/IP/CIDR, которые идут напрямую (минуя VPN-туннель).
+    var whitelist: [String] = []
 
     static func == (lhs: Profile, rhs: Profile) -> Bool { lhs.id == rhs.id }
 }

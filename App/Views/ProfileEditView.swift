@@ -41,6 +41,25 @@ struct ProfileEditView: View {
                 Stepper("SOCKS-порт: \(draft.socksPort)", value: $draft.socksPort, in: 1024...65535)
             }
 
+            Section {
+                NavigationLink {
+                    WhitelistView(whitelist: $draft.whitelist)
+                } label: {
+                    HStack {
+                        Label("Белый список", systemImage: "arrow.triangle.branch")
+                        Spacer()
+                        Text(draft.whitelist.isEmpty
+                             ? "выкл"
+                             : "\(draft.whitelist.count) зап.")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text("Маршрутизация")
+            } footer: {
+                Text("Домены и IP из белого списка идут напрямую, минуя VPN-туннель.")
+            }
+
             if draft.transport == .vp8channel {
                 Section("VP8") {
                     TextField("FPS", text: $fpsText).keyboardType(.numberPad)
@@ -127,8 +146,6 @@ struct ProfileEditView: View {
     private func copyLink() {
         let p = composed()
         guard let key = store.keyHex(for: p) else {
-            // Раньше тут был молчаливый return — пользователь не понимал,
-            // почему кнопка «не работает». Даём фидбэк + лог.
             DiagLog.error("Экспорт: у профиля '\(p.name)' нет ключа — собрать olcrtc:// нельзя")
             return
         }
