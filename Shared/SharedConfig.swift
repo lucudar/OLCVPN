@@ -51,10 +51,17 @@ enum SharedConfig {
               let dns = dict["dns"] as? String,
               let socksPort = (dict["socksPort"] as? Int) ?? (dict["socksPort"] as? NSNumber)?.intValue,
               let keyHex = dict["keyHex"] as? String, !keyHex.isEmpty
-        else { return nil }
+        else {
+            // Распишем, чего именно не хватило — основной источник «connect падает
+            // с нет профиля», и раньше было непонятно, какое поле отвалилось.
+            let keys = dict?.keys.sorted().joined(separator: ",") ?? "nil"
+            DiagLog.error("fromProviderConfig: не хватает обязательных полей (есть: \(keys))", tag: "config")
+            return nil
+        }
         let rawClientID = (dict["clientID"] as? String) ?? ""
         let clientID = rawClientID.isEmpty ? OLC.defaultClientID : rawClientID
         let debug = (dict["debug"] as? Bool) ?? true
+        DiagLog.debug("fromProviderConfig OK: carrier=\(carrier) transport=\(transport) room=\(roomID) socksPort=\(socksPort) keyLen=\(keyHex.count)", tag: "config")
         return ActiveConfig(carrier: carrier, roomID: roomID, clientID: clientID,
                             transport: transport, dns: dns, socksPort: socksPort,
                             keyHex: keyHex, debug: debug)
@@ -75,6 +82,7 @@ enum SharedConfig {
         ]
         defaults?.set(payload, forKey: activeKey)
         KeychainHelper.set(keyHex, account: keyAccount)
+        DiagLog.debug("saveActive (App Group): carrier=\(profile.carrier.rawValue) room=\(profile.roomID) socksPort=\(profile.socksPort) keyLen=\(keyHex.count)", tag: "config")
     }
 
     /// Прочитать активный конфиг из App Group (резерв, если providerConfiguration пуст).
@@ -86,10 +94,17 @@ enum SharedConfig {
               let dns = dict["dns"] as? String,
               let socksPort = dict["socksPort"] as? Int,
               let keyHex = KeychainHelper.get(account: keyAccount)
-        else { return nil }
+        else {
+            // Резервный путь молча возвращает nil — это нормально, если
+            // конфиг идёт через providerConfiguration. Логируем как debug,
+            // чтобы не шуметь в штатном сценарии.
+            DiagLog.debug("loadActive (App Group): конфиг/ключ отсутствуют (возможно, идём через providerConfiguration)", tag: "config")
+            return nil
+        }
         let rawClientID = (dict["clientID"] as? String) ?? ""
         let clientID = rawClientID.isEmpty ? OLC.defaultClientID : rawClientID
         let debug = (dict["debug"] as? Bool) ?? true
+        DiagLog.debug("loadActive (App Group) OK: carrier=\(carrier) transport=\(transport) room=\(roomID) socksPort=\(socksPort) keyLen=\(keyHex.count)", tag: "config")
         return ActiveConfig(carrier: carrier, roomID: roomID, clientID: clientID,
                             transport: transport, dns: dns, socksPort: socksPort,
                             keyHex: keyHex, debug: debug)

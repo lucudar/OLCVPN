@@ -26,13 +26,17 @@ enum KeychainHelper {
 
     static func set(_ value: String, account: String) {
         defaults?.set(value, forKey: storeKey(account))
+        DiagLog.debug("keychain set: account=\(account) len=\(value.count)", tag: "store")
     }
 
     static func get(account: String) -> String? {
-        defaults?.string(forKey: storeKey(account))
+        let v = defaults?.string(forKey: storeKey(account))
+        DiagLog.debug("keychain get: account=\(account) \(v == nil ? "(нет)" : "len=\(v!.count)")", tag: "store")
+        return v
     }
 
     static func delete(account: String) {
         defaults?.removeObject(forKey: storeKey(account))
+        DiagLog.debug("keychain delete: account=\(account)", tag: "store")
     }
 }

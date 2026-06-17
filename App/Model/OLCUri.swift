@@ -21,7 +21,27 @@ enum OLCUri {
     static let scheme = "olcrtc://"
 
     /// Разбирает строку в (Profile, keyHex).
+    ///
+    /// Логирует: вход (первые символы строки, без секрета), результат и — при
+    /// провале — какая именно часть URI не прошла. Полный ключ в лог не пишем.
     static func parse(_ raw: String) throws -> (profile: Profile, keyHex: String) {
+        // Обрезаем показ до первого '#' (секрета) — достаточно для диагностики.
+        let preview: String = {
+            if let h = raw.firstIndex(of: "#") { return String(raw[..<h]) }
+            return raw
+        }()
+        DiagLog.debug("parse olcrtc://: \(preview)…", tag: "uri")
+        do {
+            let result = try parseRaw(raw)
+            DiagLog.debug("parse OK: carrier=\(result.profile.carrier.rawValue) transport=\(result.profile.transport.rawValue) room=\(result.profile.roomID) keyLen=\(result.keyHex.count)", tag: "uri")
+            return result
+        } catch let e as ParseError {
+            DiagLog.error("parse olcrtc://: \(describe(e)) [вход: \(preview)…]", tag: "uri")
+            throw e
+        }
+    }
+
+    private static func parseRaw(_ raw: String) throws -> (profile: Profile, keyHex: String) {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard s.lowercased().hasPrefix(scheme) else { throw ParseError.missingScheme }
         s.removeFirst(scheme.count)
@@ -93,7 +113,22 @@ enum OLCUri {
         var s = "\(scheme)\(profile.carrier.rawValue)?\(profile.transport.rawValue)\(payload)@\(profile.roomID)#\(keyHex)"
         let mimo = profile.note.isEmpty ? profile.name : profile.note
         if !mimo.isEmpty { s += "$\(mimo)" }
+        DiagLog.debug("serialize: carrier=\(profile.carrier.rawValue) transport=\(profile.transport.rawValue) room=\(profile.roomID) keyLen=\(keyHex.count)", tag: "uri")
         return s
+    }
+
+    /// Человекочитаемое описание ошибки парсинга (для лога и UI).
+    private static func describe(_ error: ParseError) -> String {
+        switch error {
+        case .missingScheme:        return "нет префикса olcrtc://"
+        case .missingAuth:          return "нет carrier (jitsi/telemost/wbstream)"
+        case .missingTransport:     return "нет транспорта"
+        case .missingRoom:          return "нет roomID (после @)"
+        case .missingKey:           return "нет ключа (после #)"
+        case .invalidKey:           return "ключ не 64 hex"
+        case .unknownCarrier(let c):  return "неизвестный carrier: \(c)"
+        case .unknownTransport(let t): return "неизвестный транспорт: \(t)"
+        }
     }
 
     static func isValidKeyHex(_ key: String) -> Bool {

@@ -11,6 +11,9 @@ struct DiagnosticsView: View {
     @State private var text: String = ""
     @State private var showShare = false
     @State private var loading = false
+    /// Храним текущую перезагрузку, чтобы отменять её при повторном onAppear
+    /// (иначе плодятся параллельные Task, гоняющие друг друга за text/loading).
+    @State private var reloadTask: Task<Void, Never>?
 
     var body: some View {
         ScrollView {
@@ -44,15 +47,23 @@ struct DiagnosticsView: View {
     }
 
     private func reload() {
-        Task { await reloadAsync() }
+        // Отменяем предыдущую перезагрузку, если она ещё бежит — onAppear
+        // может срабатывать часто (переходы по табам), и без отменки
+        // накапливались бы параллельные Task.
+        reloadTask?.cancel()
+        reloadTask = Task { await reloadAsync() }
     }
 
     @MainActor
     private func reloadAsync() async {
+        // Если эту перезагрузку уже отменили (пришёл новый onAppear) — выходим,
+        // не затирая text/loading более свежей задачей.
+        if Task.isCancelled { return }
         loading = true
         defer { loading = false }
         // Живой IPC-запрос лога расширения (работает, пока сессия connecting/connected).
         let live = await tunnel.fetchExtensionLog()
+        if Task.isCancelled { return }
         if !live.isEmpty {
             UserDefaults.standard.set(live, forKey: TunnelManager.extLogKey)
         }
@@ -64,6 +75,7 @@ struct DiagnosticsView: View {
         if let ext = UserDefaults.standard.string(forKey: TunnelManager.extLogKey), !ext.isEmpty {
             parts.append("=== РАСШИРЕНИЕ (IPC) ===\n" + ext)
         }
+        if Task.isCancelled { return }
         text = parts.joined(separator: "\n\n")
     }
 }

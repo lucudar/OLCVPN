@@ -16,17 +16,22 @@ final class TunnelManager: ObservableObject {
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
     private var logPollTask: Task<Void, Never>?
+    /// Последнее значение lastError, которое мы уже залогировали, чтобы не
+    /// спамить в лог на каждой смене статуса (наблюдатель срабатывает часто).
+    private var lastLoggedError: String?
 
     func prepare() async {
+        DiagLog.debug("prepare: loadAllFromPreferences…", tag: "tunnel")
         do {
             let all = try await NETunnelProviderManager.loadAllFromPreferences()
             let m = all.first ?? NETunnelProviderManager()
             self.manager = m
             self.status = m.connection.status
             observeStatus()
+            DiagLog.debug("prepare: готово, профилей VPN=\(all.count), статус=\(m.connection.status.rawValue)", tag: "tunnel")
         } catch {
             self.lastError = error.localizedDescription
-            DiagLog.log("prepare ошибка: \(error.localizedDescription)")
+            DiagLog.error("prepare ошибка: \(error.localizedDescription)")
         }
     }
 
@@ -34,11 +39,14 @@ final class TunnelManager: ObservableObject {
     /// (работает без App Group), сохраняем и стартуем.
     func connect(providerConfig: [String: Any]) {
         lastError = nil
+        lastLoggedError = nil
+        DiagLog.debug("connect: старт (ключей в providerConfig: \(providerConfig.keys.count))", tag: "tunnel")
         Task { await self.saveAndStart(providerConfig: providerConfig) }
     }
 
     private func saveAndStart(providerConfig: [String: Any]) async {
         do {
+            DiagLog.debug("saveAndStart: loadAllFromPreferences…", tag: "tunnel")
             let all = try await NETunnelProviderManager.loadAllFromPreferences()
             let m = manager ?? all.first ?? NETunnelProviderManager()
             let proto = (m.protocolConfiguration as? NETunnelProviderProtocol) ?? NETunnelProviderProtocol()
@@ -48,22 +56,25 @@ final class TunnelManager: ObservableObject {
             m.protocolConfiguration = proto
             m.localizedDescription = "OLCVPN"
             m.isEnabled = true
+            DiagLog.debug("saveAndStart: saveToPreferences…", tag: "tunnel")
             try await m.saveToPreferences()
+            DiagLog.debug("saveAndStart: loadFromPreferences…", tag: "tunnel")
             try await m.loadFromPreferences()
             self.manager = m
             observeStatus()
+            DiagLog.debug("saveAndStart: startVPNTunnel…", tag: "tunnel")
             try m.connection.startVPNTunnel()
-            DiagLog.log("Запрос подключения (providerConfiguration)")
+            DiagLog.log("Запрос подключения отправлен (providerConfiguration)")
             startLogPolling()
         } catch {
             self.lastError = error.localizedDescription
-            DiagLog.log("connect ошибка: \(error.localizedDescription)")
+            DiagLog.error("connect/saveAndStart ошибка: \(error.localizedDescription)")
         }
     }
 
     func disconnect() {
-        manager?.connection.stopVPNTunnel()
         DiagLog.log("Запрос отключения")
+        manager?.connection.stopVPNTunnel()
     }
 
     // MARK: - Лог расширения по IPC (работает без App Group)
@@ -94,14 +105,20 @@ final class TunnelManager: ObservableObject {
     /// Отправить произвольную команду расширению по IPC и вернуть ответ строкой.
     /// Работает, пока сессия connecting/connected (App Group не требуется).
     func sendCommand(_ cmd: String) async -> String {
-        guard let session = manager?.connection as? NETunnelProviderSession else { return "" }
+        guard let session = manager?.connection as? NETunnelProviderSession else {
+            DiagLog.debug("IPC '\(cmd)': нет активной сессии", tag: "tunnel")
+            return ""
+        }
         return await withCheckedContinuation { (cont: CheckedContinuation<String, Never>) in
             do {
+                DiagLog.debug("IPC '\(cmd)' → extension…", tag: "tunnel")
                 try session.sendProviderMessage(Data(cmd.utf8)) { resp in
                     let s = resp.flatMap { String(data: $0, encoding: .utf8) } ?? ""
+                    DiagLog.debug("IPC '\(cmd)' ← \(s.isEmpty ? "пусто" : "\(s.count) байт")", tag: "tunnel")
                     cont.resume(returning: s)
                 }
             } catch {
+                DiagLog.error("IPC '\(cmd)' ошибка: \(error.localizedDescription)")
                 cont.resume(returning: "")
             }
         }
@@ -118,8 +135,19 @@ final class TunnelManager: ObservableObject {
             Task { @MainActor in
                 self.status = conn.status
                 DiagLog.log("статус -> \(self.statusText)")
-                if let e = self.lastError, !e.isEmpty {
-                    DiagLog.log("lastError: \(e)")
+                // Сбрасываем «залипшую» ошибку при успешном подключении —
+                // иначе на экране ConnectView продолжала светиться старая.
+                if conn.status == .connected, self.lastError != nil {
+                    DiagLog.log("lastError сброшен (connected)")
+                    self.lastError = nil
+                    self.lastLoggedError = nil
+                }
+                // Логируем ошибку только если она изменилась с прошлого раза:
+                // наблюдатель NEVPNStatusDidChange срабатывает на каждое
+                // промежуточное состояние и плодил бы дубли.
+                if let e = self.lastError, !e.isEmpty, e != self.lastLoggedError {
+                    DiagLog.error("lastError: \(e)")
+                    self.lastLoggedError = e
                 }
             }
         }

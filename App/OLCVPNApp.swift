@@ -12,11 +12,23 @@ struct OLCVPNApp: App {
                 .environmentObject(store)
                 .environmentObject(tunnel)
                 .environmentObject(proxy)
-                .task { await tunnel.prepare() }
+                .task {
+                    // Синхронизируем подробность логов с настройкой до первого log().
+                    DiagLog.debugEnabled = store.settings.debugLogging
+                    DiagLog.log("OLCVPN запущен")
+                    await tunnel.prepare()
+                }
                 .onOpenURL { url in
-                    // Импорт профиля по ссылке olcrtc://
-                    if let (profile, key) = try? OLCUri.parse(url.absoluteString) {
+                    // Импорт профиля по ссылке olcrtc://.
+                    // НЕ проглатываем ошибку парсинга — логируем её, иначе
+                    // пользователь не узнает, почему профиль не добавился.
+                    DiagLog.log("Получен URL импорта: \(url.absoluteString)")
+                    do {
+                        let (profile, key) = try OLCUri.parse(url.absoluteString)
                         store.add(profile: profile, keyHex: key)
+                        DiagLog.log("Профиль импортирован по ссылке: \(profile.name)")
+                    } catch {
+                        DiagLog.error("Не удалось разобрать ссылку импорта: \(error.localizedDescription)")
                     }
                 }
         }
