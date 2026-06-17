@@ -105,9 +105,14 @@ struct ProfileEditView: View {
 
     private func runPing() async {
         let p = composed()
-        guard let key = store.keyHex(for: p) else { pingResult = "нет ключа"; return }
+        guard let key = store.keyHex(for: p) else {
+            pingResult = "нет ключа"
+            DiagLog.error("Ping: у профиля '\(p.name)' нет ключа")
+            return
+        }
         pinging = true
         pingResult = nil
+        DiagLog.debug("Ping старт: \(p.name) carrier=\(p.carrier.rawValue) room=\(p.roomID)")
         let ms = await PingService.ping(profile: p, keyHex: key)
         pinging = false
         if let ms {
@@ -115,13 +120,18 @@ struct ProfileEditView: View {
             DiagLog.log("Ping \(p.name): \(ms) мс")
         } else {
             pingResult = "недоступно"
-            DiagLog.log("Ping \(p.name): ошибка")
+            DiagLog.error("Ping \(p.name): ошибка/таймаут")
         }
     }
 
     private func copyLink() {
         let p = composed()
-        guard let key = store.keyHex(for: p) else { return }
+        guard let key = store.keyHex(for: p) else {
+            // Раньше тут был молчаливый return — пользователь не понимал,
+            // почему кнопка «не работает». Даём фидбэк + лог.
+            DiagLog.error("Экспорт: у профиля '\(p.name)' нет ключа — собрать olcrtc:// нельзя")
+            return
+        }
         UIPasteboard.general.string = OLCUri.serialize(profile: p, keyHex: key)
         copied = true
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { copied = false }

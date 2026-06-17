@@ -15,15 +15,22 @@ final class ConfigStore: ObservableObject {
     init() { load() }
 
     func load() {
-        if let data = defaults?.data(forKey: listKey),
-           let list = try? JSONDecoder().decode([Profile].self, from: data) {
-            profiles = list
+        if let data = defaults?.data(forKey: listKey) {
+            do {
+                let list = try JSONDecoder().decode([Profile].self, from: data)
+                profiles = list
+            } catch {
+                // Раньше try? молча терял повреждённый список профилей —
+                // пользователь видел пустой экран без объяснения.
+                DiagLog.error("load: не декодировал список профилей: \(error.localizedDescription)", tag: "store")
+            }
         }
         if let s = defaults?.string(forKey: activeIDKey) { activeProfileID = UUID(uuidString: s) }
         if let data = defaults?.data(forKey: settingsKey),
            let s = try? JSONDecoder().decode(AppSettings.self, from: data) {
             settings = s
         }
+        DiagLog.debug("load: профилей=\(profiles.count) activeID=\(activeProfileID?.uuidString ?? "nil")", tag: "store")
     }
 
     private func persist() {
@@ -34,6 +41,7 @@ final class ConfigStore: ObservableObject {
         if let data = try? JSONEncoder().encode(settings) {
             defaults?.set(data, forKey: settingsKey)
         }
+        DiagLog.debug("persist: профилей=\(profiles.count) activeID=\(activeProfileID?.uuidString ?? "nil")", tag: "store")
     }
 
     func keyHex(for profile: Profile) -> String? {
@@ -45,6 +53,7 @@ final class ConfigStore: ObservableObject {
         KeychainHelper.set(keyHex, account: "olc.key.\(profile.id.uuidString)")
         if activeProfileID == nil { activeProfileID = profile.id }
         persist()
+        DiagLog.log("Профиль добавлен: \(profile.name) (carrier=\(profile.carrier.rawValue), всего=\(profiles.count))")
     }
 
     func update(profile: Profile, keyHex: String?) {
@@ -53,6 +62,7 @@ final class ConfigStore: ObservableObject {
         }
         if let keyHex { KeychainHelper.set(keyHex, account: "olc.key.\(profile.id.uuidString)") }
         persist()
+        DiagLog.log("Профиль обновлён: \(profile.name)")
     }
 
     func delete(_ profile: Profile) {
@@ -60,15 +70,24 @@ final class ConfigStore: ObservableObject {
         KeychainHelper.delete(account: "olc.key.\(profile.id.uuidString)")
         if activeProfileID == profile.id { activeProfileID = profiles.first?.id }
         persist()
+        DiagLog.log("Профиль удалён: \(profile.name) (осталось=\(profiles.count))")
     }
 
     func setActive(_ profile: Profile) {
         activeProfileID = profile.id
         persist()
+        DiagLog.debug("Активный профиль: \(profile.name)", tag: "store")
     }
 
     func updateSettings(_ newValue: AppSettings) {
+        let wasDebug = settings.debugLogging
         settings = newValue
+        // Подробность логов всего приложения зависит от этой настройки —
+        // обновляем флаг немедленно, чтобы не ждать перезапуска.
+        if wasDebug != newValue.debugLogging {
+            DiagLog.debugEnabled = newValue.debugLogging
+            DiagLog.log("Подробные логи: \(newValue.debugLogging ? "вкл" : "выкл")")
+        }
         persist()
     }
 

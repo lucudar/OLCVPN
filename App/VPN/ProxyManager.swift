@@ -56,7 +56,11 @@ final class ProxyManager: ObservableObject {
         let writer = CoreLogWriter { [weak self] line in self?.appendCore(line) }
         coreLogWriter = writer
         OLCCore.setLogWriter(writer)
-        activeSocksPort = profile.socksPort
+        // Захватываем неизменяемое значение порта на main ДО ухода в фоновый
+        // поток — иначе runTest() ниже читал мутабельное свойство с фона
+        // (гонка данных при возможной перезаписи).
+        let socksPort = profile.socksPort
+        activeSocksPort = socksPort
         ui {
             self.busy = true
             self.lastError = nil
@@ -65,35 +69,41 @@ final class ProxyManager: ObservableObject {
             self.log.removeAll()
         }
         let cid = profile.clientID.isEmpty ? OLC.defaultClientID : profile.clientID
-        append("Старт прокси: carrier=\(profile.carrier.rawValue) transport=\(profile.transport.rawValue) room=\(profile.roomID) clientID=\(cid) socks=127.0.0.1:\(profile.socksPort)")
+        append("Старт прокси: carrier=\(profile.carrier.rawValue) transport=\(profile.transport.rawValue) room=\(profile.roomID) clientID=\(cid) socks=127.0.0.1:\(socksPort)")
         let p = profile
         let key = keyHex
+        let dbg = debug
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
+            // Локальная копия порта для фонового потока — безопасна от гонки.
+            let port = socksPort
             let t0 = Date()
             do {
                 OLCCore.setProviders()
                 OLCCore.setTransport(p.transport.rawValue)
                 OLCCore.setDNS(p.dns)
-                OLCCore.setDebug(debug)
+                OLCCore.setDebug(dbg)
                 self.append("MobileStart…")
                 let tStart = Date()
                 try OLCCore.start(carrier: p.carrier.rawValue, roomID: p.roomID,
                                   clientID: p.clientID.isEmpty ? OLC.defaultClientID : p.clientID,
-                                  keyHex: key, socksPort: p.socksPort)
+                                  keyHex: key, socksPort: port)
                 self.append("MobileStart OK за \(ProxyManager.ms(tStart)) мс. Жду готовности (waitReady, таймаут 40000 мс)…")
                 let tReady = Date()
                 try OLCCore.waitReady(timeoutMillis: 40000)
-                self.append("waitReady OK за \(ProxyManager.ms(tReady)) мс — ядро готово, SOCKS на 127.0.0.1:\(p.socksPort)")
+                self.append("waitReady OK за \(ProxyManager.ms(tReady)) мс — ядро готово, SOCKS на 127.0.0.1:\(port)")
                 self.ui {
                     self.running = true
                     self.busy = false
-                    self.status = "Ядро работает (SOCKS 127.0.0.1:\(p.socksPort))"
+                    self.status = "Ядро работает (SOCKS 127.0.0.1:\(port))"
                 }
-                self.runTest()
+                // Тест связи запускаем с захваченным значением порта, а не
+                // читаем self.activeSocksPort с фона.
+                self.runTest(port: port)
             } catch {
                 OLCCore.stop()
                 self.append("ОШИБКА ядра за \(ProxyManager.ms(t0)) мс: \(error.localizedDescription)")
+                DiagLog.error("Прокси: сбой ядра за \(ProxyManager.ms(t0)) мс: \(error.localizedDescription)", tag: "proxy")
                 self.ui {
                     self.lastError = error.localizedDescription
                     self.status = "Ошибка запуска ядра"
@@ -124,15 +134,19 @@ final class ProxyManager: ObservableObject {
     /// Проверка связи через локальный SOCKS5 (сырой сокет — URLSession на iOS
     /// SOCKS не поддерживает). Делаем SOCKS5-рукопожатие к 127.0.0.1:port,
     /// CONNECT к icanhazip.com:80 и обычный HTTP GET. Возвращает внешний IP.
-    func runTest() {
-        let port = activeSocksPort
-        append("Проверка связи: SOCKS5 → icanhazip.com:80 через 127.0.0.1:\(port)…")
+    /// Параметр port передаётся явно, чтобы не читать мутабельное activeSocksPort
+    /// с фонового потока (гонка данных).
+    func runTest(port: Int? = nil) {
+        // По умолчанию берём активный порт — вызывается с main (кнопка UI),
+        // гонки нет. Из start(...) приходит явное значение с фона.
+        let p = port ?? activeSocksPort
+        append("Проверка связи: SOCKS5 → icanhazip.com:80 через 127.0.0.1:\(p)…")
         ui { self.testResult = "Проверяю…" }
         let t0 = Date()
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
             let result = ProxyManager.socks5HttpGet(host: "icanhazip.com", port: 80,
-                                                     socksHost: "127.0.0.1", socksPort: port,
+                                                     socksHost: "127.0.0.1", socksPort: p,
                                                      timeoutSec: 15)
             switch result {
             case .success(let (ip, code)):
@@ -140,6 +154,7 @@ final class ProxyManager: ObservableObject {
                 self.ui { self.testResult = "✅ Связь есть за \(ProxyManager.ms(t0)) мс\nВнешний IP: \(ip) (HTTP \(code))" }
             case .failure(let msg):
                 self.append("Тест: ОШИБКА — \(msg) (\(ProxyManager.ms(t0)) мс)")
+                DiagLog.error("SOCKS-тест: \(msg) (\(ProxyManager.ms(t0)) мс)", tag: "proxy")
                 self.ui { self.testResult = "❌ Нет связи через прокси: \(msg)" }
             }
         }

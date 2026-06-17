@@ -6,6 +6,12 @@ enum DiagLog {
     private static let fileName = "olc.diag.log"
     private static let maxBytes = 256 * 1024
 
+    /// Подробные/детальные логи (дамп конфигов, фазы Go-вызовов, парсинг URI и т.п.)
+    /// пишутся только когда флаг поднят. Жизненный цикл и ошибки пишутся ВСЕГДА.
+    /// Каждый процесс выставляет флаг самостоятельно: app — из AppSettings,
+    /// extension — из cfg.debug (приходит через providerConfiguration).
+    static var debugEnabled: Bool = true
+
     private static var fileURL: URL? {
         if let group = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: OLC.appGroup) {
@@ -37,6 +43,18 @@ enum DiagLog {
             try? data.write(to: url)
         }
         trimIfNeeded()
+    }
+
+    /// Детальный лог: пишется только когда debugEnabled == true.
+    /// Для дампа конфигов, фаз Go-вызовов, парсинга URI — того, что шумит.
+    static func debug(_ message: String, tag: String = "app") {
+        guard debugEnabled else { return }
+        log(message, tag: tag)
+    }
+
+    /// Лог ошибки: пишется ВСЕГДА, отдельный тег «error» для быстрого поиска.
+    static func error(_ message: String, tag: String = "error") {
+        log(message, tag: tag)
     }
 
     static func read() -> String {

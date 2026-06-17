@@ -36,10 +36,29 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
         TunnelLog.shared.log("Конфиг [\(source)]: carrier=\(cfg.carrier) transport=\(cfg.transport) room=\(cfg.roomID) clientID='\(cfg.clientID)' dns=\(cfg.dns) socksPort=\(cfg.socksPort) keyLen=\(cfg.keyHex.count) debugProfile=\(cfg.debug)")
 
+        // Подробность логов ядра/конфига в extension задаётся полем debug
+        // конфига (приходит через providerConfiguration из настроек приложения).
+        DiagLog.debugEnabled = cfg.debug
+
         // Старт ядра — в ФОНОВОМ потоке, чтобы очередь расширения оставалась
         // отзывчивой (иначе handleAppMessage/IPC не отвечает, пока висит waitReady).
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self else { return }
+
+            // 0) Подключаем capture логов ядра olcRTC ДО старта, иначе
+            // ранние строки [pc]/[ice]/jitsi/smux (в т.ч. ошибки инициализации)
+            // уйдут в stderr, который iOS у extension не показывает, и мы их
+            // потеряем. Ядро пишет лог двумя путями:
+            //   - Go-пакет `log` -> SetLogWriter -> CoreLogWriter (основной канал);
+            //   - прямой вывод в stderr (fmt.Print и пр.) -> CoreLogCapture.
+            // Зеркалим оба в TunnelLog, чтобы видеть в IPC-дампе и в DiagnosticsView.
+            CoreLogCapture.start { line in
+                TunnelLog.shared.log(line, tag: "core")
+            }
+            OLCCore.setLogWriter(CoreLogWriter { line in
+                TunnelLog.shared.log(line, tag: "core")
+            })
+            TunnelLog.shared.log("Capture логов ядра подключен (stderr + log.SetOutput)")
 
             // 1) Настройка ядра olcRTC. На время диагностики всегда debug=true.
             OLCCore.setProviders()
@@ -90,7 +109,8 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 }
                 self.tun2socks = Tun2Socks(packetFlow: self.packetFlow,
                                            socksHost: "127.0.0.1",
-                                           socksPort: cfg.socksPort)
+                                           socksPort: cfg.socksPort,
+                                           logLevel: cfg.debug ? "info" : "warn")
                 self.tun2socks?.start()
                 TunnelLog.shared.log("=== Туннель запущен (всего \(self.ms(t0: t0)) мс) ===")
                 completionHandler(nil)
@@ -100,11 +120,37 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
     override func stopTunnel(with reason: NEProviderStopReason,
                              completionHandler: @escaping () -> Void) {
-        TunnelLog.shared.log("Остановка туннеля (reason=\(reason.rawValue))")
+        TunnelLog.shared.log("Остановка туннеля (reason=\(reason.rawValue) \(Self.reasonText(reason)))")
         tun2socks?.stop()
         tun2socks = nil
         OLCCore.stop()
         completionHandler()
+    }
+
+    /// Человекочитаемая расшифровка NEProviderStopReason для лога.
+    private static func reasonText(_ reason: NEProviderStopReason) -> String {
+        switch reason {
+        case .none: return "none"
+        case .userInitiated: return "userInitiated"
+        case .providerFailed: return "providerFailed"
+        case .noNetworkAvailable: return "noNetworkAvailable"
+        case .unrecoverableNetworkChange: return "unrecoverableNetworkChange"
+        case .providerDisabled: return "providerDisabled"
+        case .authenticationCanceled: return "authenticationCanceled"
+        case .configurationFailed: return "configurationFailed"
+        case .idleTimeout: return "idleTimeout"
+        case .sessionDisconnected: return "sessionDisconnected"
+        case .persistentConnectionFailed: return "persistentConnectionFailed"
+        case .configurationReadOnly: return "configurationReadOnly"
+        case .configurationStale: return "configurationStale"
+        case .superceded: return "superceded"
+        case .userLogout: return "userLogout"
+        case .userSwitch: return "userSwitch"
+        case .connectionFailed: return "connectionFailed"
+        case .sleep: return "sleep"
+        case .appUpdate: return "appUpdate"
+        @unknown default: return "unknown"
+        }
     }
 
     override func handleAppMessage(_ messageData: Data,

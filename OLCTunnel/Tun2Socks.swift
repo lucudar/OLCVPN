@@ -10,13 +10,19 @@ final class Tun2Socks {
     private let socksHost: String
     private let socksPort: Int
     private let mtu: Int
+    private let logLevel: String
     private var worker: Thread?
 
-    init(packetFlow: NEPacketTunnelFlow, socksHost: String, socksPort: Int, mtu: Int = 1500) {
+    init(packetFlow: NEPacketTunnelFlow, socksHost: String, socksPort: Int,
+         mtu: Int = 1500, logLevel: String = "warn") {
         self.packetFlow = packetFlow
         self.socksHost = socksHost
         self.socksPort = socksPort
         self.mtu = mtu
+        // hev-socks5-tunnel: «debug»/«info»/«warn»/«error». По умолчанию warn,
+        // PacketTunnelProvider при debug-конфиге передаёт «info», чтобы видеть
+        // установку соединений и проблемы рукопожатия SOCKS.
+        self.logLevel = logLevel
     }
 
     func start() {
@@ -61,7 +67,7 @@ final class Tun2Socks {
           udp: udp
         misc:
           task-stack-size: 81920
-          log-level: warn
+          log-level: \(logLevel)
         """
     }
 
