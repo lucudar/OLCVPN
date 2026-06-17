@@ -52,7 +52,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             //   - Go-пакет `log` -> SetLogWriter -> CoreLogWriter (основной канал);
             //   - прямой вывод в stderr (fmt.Print и пр.) -> CoreLogCapture.
             // Зеркалим оба в TunnelLog, чтобы видеть в IPC-дампе и в DiagnosticsView.
-            CoreLogCapture.start { line in
+            CoreLogCapture.shared.start { line in
                 TunnelLog.shared.log(line, tag: "core")
             }
             OLCCore.setLogWriter(CoreLogWriter { line in
@@ -128,6 +128,11 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     /// Человекочитаемая расшифровка NEProviderStopReason для лога.
+    ///
+    /// Перечислены только кейсы, стабильно присутствующие в NetworkExtension SDK
+    /// (Xcode 15+). Список кейсов менялся между версиями SDK, поэтому остальные
+    /// значения (включая новые) уходят в @unknown default с числовым rawValue —
+    /// это безопасно и не ломает сборку при обновлении Xcode.
     private static func reasonText(_ reason: NEProviderStopReason) -> String {
         switch reason {
         case .none: return "none"
@@ -139,17 +144,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         case .authenticationCanceled: return "authenticationCanceled"
         case .configurationFailed: return "configurationFailed"
         case .idleTimeout: return "idleTimeout"
-        case .sessionDisconnected: return "sessionDisconnected"
-        case .persistentConnectionFailed: return "persistentConnectionFailed"
-        case .configurationReadOnly: return "configurationReadOnly"
-        case .configurationStale: return "configurationStale"
-        case .superceded: return "superceded"
         case .userLogout: return "userLogout"
         case .userSwitch: return "userSwitch"
         case .connectionFailed: return "connectionFailed"
         case .sleep: return "sleep"
         case .appUpdate: return "appUpdate"
-        @unknown default: return "unknown"
+        @unknown default: return "unknown(\(reason.rawValue))"
         }
     }
 

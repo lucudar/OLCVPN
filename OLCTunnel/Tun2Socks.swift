@@ -34,7 +34,10 @@ final class Tun2Socks {
         TunnelLog.shared.log("старт fd=\(fd) -> \(socksHost):\(socksPort), mtu=\(mtu)", tag: "tun2socks")
         TunnelLog.shared.log("config:\n\(config)", tag: "tun2socks")
         let thread = Thread { [weak self] in
-            guard let self else { return }
+            // self здесь не используется (всё через TunnelLog.shared и захваченные
+            // config/fd), но [weak self] оставляем для консистентности с жизненным
+            // циклом Tun2Socks: если объект уже освобождён, потоку делать нечего.
+            guard self != nil else { return }
             config.withCString { cfg in
                 let len = UInt32(strlen(cfg))
                 // Блокирующий вызов: работает до hev_socks5_tunnel_quit().
