@@ -13,7 +13,7 @@ struct WhitelistView: View {
                     TextField("example.com или 10.0.0.0/8", text: $newEntry)
                         .textInputAutocapitalization(.never)
                         .autocorrectionDisabled(true)
-                        .submitLabel(.add)
+                        .submitLabel(.done)
                         .onSubmit(addEntry)
                     Button {
                         addEntry()
