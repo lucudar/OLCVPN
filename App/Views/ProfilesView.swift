@@ -22,7 +22,8 @@ struct ProfilesView: View {
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 5, leading: Theme.hPadding,
                                                           bottom: 5, trailing: Theme.hPadding))
-                                // Свайп влево → удалить профиль (полный свайп удаляет сразу)
+                                // Свайп влево → удалить профиль (полный свайп удаляет сразу).
+                                // tint(.black): фон кнопки тёмный, а не белый глобальный акцент.
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                                     Button(role: .destructive) {
                                         withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
@@ -31,6 +32,7 @@ struct ProfilesView: View {
                                     } label: {
                                         Label("Удалить", systemImage: "trash.fill")
                                     }
+                                    .tint(Theme.bgRaised)
                                 }
                         }
                     }
