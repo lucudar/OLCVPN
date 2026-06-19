@@ -5,14 +5,12 @@ import UIKit
 struct OLCVPNApp: App {
     @StateObject private var store = ConfigStore()
     @StateObject private var tunnel = TunnelManager()
-    @StateObject private var proxy = ProxyManager()
 
     var body: some Scene {
         WindowGroup {
             RootView()
                 .environmentObject(store)
                 .environmentObject(tunnel)
-                .environmentObject(proxy)
                 .task {
                     DiagLog.debugEnabled = store.settings.debugLogging
                     DiagLog.log("OLCVPN запущен")
@@ -28,7 +26,7 @@ struct OLCVPNApp: App {
                         DiagLog.error("Не удалось разобрать ссылку импорта: \(error.localizedDescription)")
                     }
                 }
-                .tint(Theme.teal)
+                .tint(.white)
                 .preferredColorScheme(.dark)
         }
     }
@@ -36,15 +34,14 @@ struct OLCVPNApp: App {
 
 struct RootView: View {
     init() {
-        // Непрозрачный таб-бар: контент не просвечивает через полупрозрачный фон.
+        // Непрозрачный почти-чёрный таб-бар (монохром).
         let tabAppearance = UITabBarAppearance()
         tabAppearance.configureWithOpaqueBackground()
-        tabAppearance.backgroundColor = UIColor(Theme.bgDeep.opacity(0.95))
-        tabAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
+        tabAppearance.backgroundColor = UIColor(Theme.bgDeep)
         UITabBar.appearance().standardAppearance = tabAppearance
         UITabBar.appearance().scrollEdgeAppearance = tabAppearance
 
-        // Навигационный бар: полупрозрачный, чтобы aurora-фон был частично виден.
+        // Навигационный бар: прозрачный, белые заголовки.
         let nav = UINavigationBarAppearance()
         nav.configureWithTransparentBackground()
         nav.titleTextAttributes = [.foregroundColor: UIColor(Theme.textPrimary)]
@@ -59,8 +56,6 @@ struct RootView: View {
                 .tabItem { Label("Подключение", systemImage: "bolt.horizontal.circle.fill") }
             ProfilesView()
                 .tabItem { Label("Профили", systemImage: "square.stack.3d.up.fill") }
-            ProxyTestView()
-                .tabItem { Label("Прокси", systemImage: "network") }
             SettingsView()
                 .tabItem { Label("Настройки", systemImage: "gearshape.fill") }
         }

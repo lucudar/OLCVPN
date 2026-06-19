@@ -1,47 +1,50 @@
 import SwiftUI
 
-/// Единый визуальный язык приложения — стиль **Aurora Glass**.
+/// Единый визуальный язык приложения — **Mono** (минимализм, чёрно-белый).
 ///
-/// Глубоко-синий фон, мягкое aurora-свечение (teal → green → blue), фрост-стекло
-/// (`.ultraThinMaterial`) для карточек, градиентные кнопки. Тёмная тема.
+/// Тёмная почти-чёрная подложка, белый текст, тонкие серые штрихи и
+/// «стеклянные» карточки. Без цветных акцентов — только оттенки серого и белый.
+/// Главный декоративный элемент — вращающаяся линия по рамке круга (`RotatingRing`).
 ///
 /// Используется всеми экранами через:
-///   - `AuroraBackground()`            — подложка под контент;
-///   - `.glassCard()`                  — стеклянная карточка;
-///   - `.buttonStyle(AuroraButtonStyle())` — главная кнопка;
-///   - цвета `Color.aurora*` / `Theme.*`.
+///   - `AuroraBackground()`            — нейтральная подложка под контент;
+///   - `.glassCard()`                  — карточка со стеклом и тонкой рамкой;
+///   - `.buttonStyle(AuroraButtonStyle())` — главная кнопка (белая заливка, чёрный текст);
+///   - `RotatingRing(...)`             — анимированное кольцо-рамка;
+///   - цвета `Theme.*`.
 enum Theme {
-    // MARK: - Палитра
+    // MARK: - Палитра (монохром)
 
-    static let bgDeep      = Color(hex: 0x070B16)   // почти чёрно-синий фон
-    static let bgRaised    = Color(hex: 0x0E1426)   // приподнятые поверхности
-    static let stroke      = Color.white.opacity(0.10)
-    static let strokeStrong = Color.white.opacity(0.18)
+    static let bgDeep       = Color(hex: 0x0A0A0B)   // почти чёрный фон
+    static let bgRaised     = Color(hex: 0x161618)   // приподнятые поверхности
+    static let stroke       = Color.white.opacity(0.12)
+    static let strokeStrong = Color.white.opacity(0.22)
 
-    static let textPrimary   = Color(hex: 0xF2F5FF)
-    static let textSecondary = Color(hex: 0x9AA6C2)
+    static let textPrimary   = Color(hex: 0xF7F7F8)
+    static let textSecondary = Color(hex: 0x9A9AA0)
 
-    // Aurora-акценты
-    static let teal   = Color(hex: 0x2DD4BF)
-    static let green  = Color(hex: 0x34D399)
-    static let blue   = Color(hex: 0x3B82F6)
-    static let indigo = Color(hex: 0x6366F1)
+    // «Акценты» в монохроме — просто оттенки серого/белого.
+    // Имена сохранены, чтобы не ломать существующие экраны.
+    static let teal   = Color(hex: 0xFFFFFF)
+    static let green  = Color(hex: 0xE6E6E8)
+    static let blue   = Color(hex: 0xC2C2C8)
+    static let indigo = Color(hex: 0x8E8E96)
 
-    // Статусы
-    static let statusOn    = green
-    static let statusBusy  = Color(hex: 0xF6B73C)
-    static let statusOff   = Color(hex: 0x64708C)
-    static let statusError = Color(hex: 0xFF5C6C)
+    // Статусы (монохром: яркость = смысл)
+    static let statusOn    = Color(hex: 0xFFFFFF)
+    static let statusBusy  = Color(hex: 0xC2C2C8)
+    static let statusOff   = Color(hex: 0x55555C)
+    static let statusError = Color(hex: 0xEDEDEF)
 
-    // MARK: - Градиенты
+    // MARK: - Градиенты (монохромные)
 
-    /// Основной aurora-градиент (для колец, кнопок, акцентов).
+    /// Основной градиент (для колец, кнопок, акцентов) — белый → серый.
     static let aurora = LinearGradient(
-        colors: [teal, green, blue],
+        colors: [Color.white, Color(hex: 0x9A9AA0)],
         startPoint: .topLeading, endPoint: .bottomTrailing)
 
     static let auroraSoft = LinearGradient(
-        colors: [teal.opacity(0.85), blue.opacity(0.85)],
+        colors: [Color.white.opacity(0.92), Color(hex: 0x9A9AA0).opacity(0.92)],
         startPoint: .leading, endPoint: .trailing)
 
     static func statusGradient(_ color: Color) -> LinearGradient {
@@ -68,21 +71,14 @@ extension Color {
     }
 }
 
-// MARK: - Анимированный aurora-фон
+// MARK: - Подложка
 
-/// Подложка под весь контент: тёмный фон + медленно дрейфующие цветные «пятна»
-/// (radial gradients), создающие эффект полярного сияния.
+/// Минималистичная подложка: почти-чёрный фон с едва заметным белым свечением.
+/// Нейтральна к layout, поэтому контент никогда не уезжает за края.
 ///
-/// ВАЖНО: фон ДОЛЖЕН быть нейтральным к layout. Раньше «пятна» задавались
-/// фиксированными размерами 460–520pt, а так как `.offset` и `.ignoresSafeArea()`
-/// прозрачны для системы компоновки, каждый круг сообщал родителю свой полный
-/// размер. Из-за этого внутренний `ZStack` фона (и, как следствие, корневой
-/// `ZStack` каждого экрана) становился ~520pt шириной — шире экрана — и контент
-/// обрезался с обеих сторон.
-///
-/// Решение: оборачиваем «пятна» в `GeometryReader`, фиксируем внутренний `ZStack`
-/// строго по размеру экрана и обрезаем (`.clipped()`). Теперь фон занимает ровно
-/// доступную область и никогда не растягивает контент за пределы экрана.
+/// ВАЖНО (сохранено из фикса 1.0.1): свечение оборачиваем в `GeometryReader`,
+/// фиксируем внутренний `ZStack` строго по размеру экрана и обрезаем (`.clipped()`),
+/// чтобы крупные размытые круги не растягивали корневой `ZStack` экрана.
 struct AuroraBackground: View {
     @State private var animate = false
 
@@ -91,34 +87,80 @@ struct AuroraBackground: View {
             ZStack {
                 Theme.bgDeep
 
-                blob(Theme.teal,   size: 460)
-                    .offset(x: animate ? -120 : -160, y: animate ? -220 : -260)
-                blob(Theme.blue,   size: 520)
-                    .offset(x: animate ? 150 : 120, y: animate ? -120 : -60)
-                blob(Theme.indigo, size: 480)
-                    .offset(x: animate ? -90 : -40, y: animate ? 260 : 320)
-                blob(Theme.green,  size: 380)
-                    .offset(x: animate ? 160 : 200, y: animate ? 260 : 300)
+                glow(opacity: 0.06, size: 460)
+                    .offset(x: animate ? -60 : -100, y: animate ? -240 : -280)
+                glow(opacity: 0.04, size: 520)
+                    .offset(x: animate ? 120 : 90, y: animate ? 280 : 320)
             }
-            // Жёстко фиксируем размер по экрану, чтобы крупные «пятна»
-            // не влияли на компоновку, и обрезаем всё, что выходит за края.
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
         }
         .ignoresSafeArea()
         .onAppear {
-            withAnimation(.easeInOut(duration: 14).repeatForever(autoreverses: true)) {
+            withAnimation(.easeInOut(duration: 16).repeatForever(autoreverses: true)) {
                 animate = true
             }
         }
     }
 
-    private func blob(_ color: Color, size: CGFloat) -> some View {
+    private func glow(opacity: Double, size: CGFloat) -> some View {
         Circle()
-            .fill(RadialGradient(colors: [color.opacity(0.55), color.opacity(0.0)],
+            .fill(RadialGradient(colors: [Color.white.opacity(opacity), Color.white.opacity(0)],
                                  center: .center, startRadius: 0, endRadius: size / 2))
             .frame(width: size, height: size)
             .blur(radius: 60)
+    }
+}
+
+// MARK: - Анимированное кольцо-рамка (вращающаяся линия)
+
+/// Тонкая статичная рамка-круг с бегущей по ней светлой дугой —
+/// главный декоративный элемент минималистичного дизайна.
+///
+/// - Parameters:
+///   - size: диаметр кольца;
+///   - lineWidth: толщина линии;
+///   - active: `true` — дуга вращается, `false` — стоит на месте;
+///   - progress: длина бегущей дуги (доля окружности, 0…1);
+///   - duration: период полного оборота, сек.
+struct RotatingRing: View {
+    var size: CGFloat = 200
+    var lineWidth: CGFloat = 3
+    var active: Bool = true
+    var progress: CGFloat = 0.25
+    var duration: Double = 2.2
+
+    @State private var angle: Double = 0
+
+    var body: some View {
+        ZStack {
+            // Статичная рамка
+            Circle()
+                .stroke(Theme.stroke, lineWidth: lineWidth)
+
+            // Бегущая дуга (хвост гаснет → ведущая точка яркая)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(
+                    AngularGradient(
+                        gradient: Gradient(colors: [Color.white.opacity(0), Color.white]),
+                        center: .center,
+                        startAngle: .degrees(0),
+                        endAngle: .degrees(Double(progress) * 360)),
+                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(angle))
+        }
+        .frame(width: size, height: size)
+        .onAppear { restart() }
+        .onChange(of: active) { _ in restart() }
+    }
+
+    private func restart() {
+        angle = 0
+        guard active else { return }
+        withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
+            angle = 360
+        }
     }
 }
 
@@ -141,7 +183,7 @@ struct GlassCard: ViewModifier {
 }
 
 extension View {
-    /// Оборачивает содержимое в стеклянную карточку Aurora Glass.
+    /// Оборачивает содержимое в минималистичную стеклянную карточку.
     func glassCard(padding: CGFloat = 16, radius: CGFloat = Theme.radius) -> some View {
         modifier(GlassCard(padding: padding, radius: radius))
     }
@@ -149,19 +191,19 @@ extension View {
 
 // MARK: - Кнопка
 
-/// Главная кнопка: заливка градиентом, мягкая тень, отклик на нажатие.
+/// Главная кнопка: белая заливка, чёрный текст, мягкая тень, отклик на нажатие.
 struct AuroraButtonStyle: ButtonStyle {
-    var fill: AnyShapeStyle = AnyShapeStyle(Theme.aurora)
-    var tint: Color = Theme.teal
+    var fill: AnyShapeStyle = AnyShapeStyle(Color.white)
+    var tint: Color = .white
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.headline)
-            .foregroundStyle(.white)
+            .foregroundStyle(.black)
             .frame(maxWidth: .infinity)
             .padding(.vertical, 16)
             .background(fill, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-            .shadow(color: tint.opacity(0.45), radius: configuration.isPressed ? 6 : 16, y: 6)
+            .shadow(color: .black.opacity(0.5), radius: configuration.isPressed ? 4 : 12, y: 6)
             .scaleEffect(configuration.isPressed ? 0.97 : 1)
             .animation(.easeOut(duration: 0.15), value: configuration.isPressed)
     }
@@ -183,10 +225,12 @@ struct GlassButtonStyle: ButtonStyle {
 // MARK: - Чип / pill
 
 /// Маленькая «таблетка» с подписью (carrier · transport и т.п.).
+/// В монохроме параметр `color` сохранён для совместимости, но визуально
+/// используется единый бело-серый стиль.
 struct PillLabel: View {
     let text: String
     var systemImage: String? = nil
-    var color: Color = Theme.teal
+    var color: Color = Theme.textSecondary
 
     var body: some View {
         HStack(spacing: 6) {
@@ -194,10 +238,10 @@ struct PillLabel: View {
             Text(text).font(.caption.weight(.medium))
                 .fixedSize(horizontal: false, vertical: true)
         }
-        .foregroundStyle(color)
+        .foregroundStyle(Theme.textPrimary)
         .padding(.vertical, 5).padding(.horizontal, 10)
-        .background(color.opacity(0.14), in: Capsule())
-        .overlay(Capsule().strokeBorder(color.opacity(0.30), lineWidth: 1))
+        .background(Color.white.opacity(0.08), in: Capsule())
+        .overlay(Capsule().strokeBorder(Theme.stroke, lineWidth: 1))
     }
 }
 
@@ -210,7 +254,7 @@ struct SectionTitle: View {
         HStack(spacing: 7) {
             if let systemImage {
                 Image(systemName: systemImage).font(.subheadline)
-                    .foregroundStyle(Theme.teal)
+                    .foregroundStyle(Theme.textSecondary)
             }
             Text(text.uppercased())
                 .font(.caption.weight(.bold))
@@ -232,11 +276,12 @@ extension OLCCarrier {
         case .wbstream: return "dot.radiowaves.left.and.right"
         }
     }
+    /// В монохроме — оттенки серого/белого вместо цветных акцентов.
     var tint: Color {
         switch self {
-        case .jitsi:    return Theme.teal
-        case .telemost: return Theme.indigo
-        case .wbstream: return Theme.green
+        case .jitsi:    return Theme.textPrimary
+        case .telemost: return Theme.blue
+        case .wbstream: return Theme.indigo
         }
     }
 }
