@@ -4,6 +4,7 @@ struct ProfilesView: View {
     @EnvironmentObject var store: ConfigStore
     @State private var showingImport = false
     @State private var editing: Profile?
+    @State private var appeared = false
 
     var body: some View {
         NavigationStack {
@@ -12,6 +13,7 @@ struct ProfilesView: View {
 
                 if store.profiles.isEmpty {
                     emptyState
+                        .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 } else {
                     List {
                         ForEach(store.profiles) { p in
@@ -20,7 +22,11 @@ struct ProfilesView: View {
                                 .listRowSeparator(.hidden)
                                 .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
                                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) { store.delete(p) } label: {
+                                    Button(role: .destructive) {
+                                        withAnimation(.easeInOut(duration: 0.3)) {
+                                            store.delete(p)
+                                        }
+                                    } label: {
                                         Label("Удалить", systemImage: "trash")
                                     }
                                     Button { editing = p } label: {
@@ -28,10 +34,22 @@ struct ProfilesView: View {
                                     }
                                     .tint(Theme.blue)
                                 }
+                                .transition(.asymmetric(
+                                    insertion: .move(edge: .trailing).combined(with: .opacity),
+                                    removal: .move(edge: .leading).combined(with: .opacity)
+                                ))
                         }
                     }
                     .listStyle(.plain)
                     .scrollContentBackground(.hidden)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: store.profiles)
+                    .opacity(appeared ? 1 : 0)
+                    .offset(y: appeared ? 0 : 30)
+                    .onAppear {
+                        withAnimation(.easeOut(duration: 0.5)) {
+                            appeared = true
+                        }
+                    }
                 }
             }
             .navigationTitle("Профили")
@@ -52,7 +70,9 @@ struct ProfilesView: View {
     private func row(for p: Profile) -> some View {
         let active = store.activeProfileID == p.id
         return Button {
-            store.setActive(p)
+            withAnimation(.easeInOut(duration: 0.25)) {
+                store.setActive(p)
+            }
         } label: {
             HStack(spacing: 13) {
                 Image(systemName: p.carrier.glyph)
@@ -78,6 +98,7 @@ struct ProfilesView: View {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title3)
                         .foregroundStyle(Theme.statusOn)
+                        .transition(.scale.combined(with: .opacity))
                 }
             }
             .glassCard(padding: 13)
@@ -86,6 +107,7 @@ struct ProfilesView: View {
                     .strokeBorder(active ? AnyShapeStyle(Theme.aurora) : AnyShapeStyle(Color.clear),
                                   lineWidth: 1.5)
             )
+            .animation(.easeInOut(duration: 0.25), value: active)
         }
         .buttonStyle(.plain)
     }
