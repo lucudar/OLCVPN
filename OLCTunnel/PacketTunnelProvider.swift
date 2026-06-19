@@ -4,6 +4,17 @@ import NetworkExtension
 class PacketTunnelProvider: NEPacketTunnelProvider {
     private var tun2socks: Tun2Socks?
 
+    /// В Network Extension действует жёсткий лимит памяти (~50 MB). Тяжёлые
+    /// видео-транспорты olcRTC (vp8/sei/video) тянут кодеки и легко его пробивают,
+    /// что приводит к убийству расширения системой. Поэтому в туннеле принудительно
+    /// используем лёгкий `datachannel`. (Эксперименты с тяжёлыми транспортами —
+    /// только вне extension.)
+    private static let heavyTransports: Set<String> = ["vp8channel", "videochannel", "seichannel"]
+
+    private static func memorySafeTransport(_ t: String) -> String {
+        heavyTransports.contains(t.lowercased()) ? "datachannel" : t
+    }
+
     override func startTunnel(options: [String: NSObject]?,
                               completionHandler: @escaping (Error?) -> Void) {
         let t0 = Date()
@@ -34,6 +45,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
 
         TunnelLog.shared.log("Конфиг [\(source)]: carrier=\(cfg.carrier) transport=\(cfg.transport) room=\(cfg.roomID) clientID='\(cfg.clientID)' dns=\(cfg.dns) socksPort=\(cfg.socksPort) keyLen=\(cfg.keyHex.count) debugProfile=\(cfg.debug) whitelist=\(cfg.whitelist.count)")
 
+        // Защита памяти extension: тяжёлые транспорты принудительно → datachannel.
+        let transport = Self.memorySafeTransport(cfg.transport)
+        if transport != cfg.transport {
+            TunnelLog.shared.log("⚠️ transport=\(cfg.transport) тяжёлый для NE (лимит ~50MB) → принудительно \(transport)")
+        }
+
         DiagLog.debugEnabled = cfg.debug
 
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
@@ -48,10 +65,10 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             TunnelLog.shared.log("Capture логов ядра подключен (stderr + log.SetOutput)")
 
             OLCCore.setProviders()
-            OLCCore.setTransport(cfg.transport)
+            OLCCore.setTransport(transport)
             OLCCore.setDNS(cfg.dns)
             OLCCore.setDebug(true)
-            TunnelLog.shared.log("Ядро сконфигурировано (transport=\(cfg.transport), dns=\(cfg.dns), debug=true)")
+            TunnelLog.shared.log("Ядро сконфигурировано (transport=\(transport), dns=\(cfg.dns), debug=true)")
 
             do {
                 let s1 = Date()
