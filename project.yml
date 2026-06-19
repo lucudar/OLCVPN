@@ -11,7 +11,10 @@ settings:
     DEVELOPER_TEAM: ABCDE12345
     CODE_SIGN_STYLE: Automatic
     SWIFT_VERSION: "5.9"
-    MARKETING_VERSION: "1.0"
+    # Версия по семантике (MAJOR.MINOR.PATCH). Поднимаем на каждом изменении:
+    #   PATCH — исправления багов, MINOR — новые фичи, MAJOR — крупные несовместимые изменения.
+    MARKETING_VERSION: "1.0.0"
+    # Номер сборки — целое число, растёт на каждый билд.
     CURRENT_PROJECT_VERSION: "1"
 
 targets:
