@@ -14,15 +14,11 @@ struct OLCVPNApp: App {
                 .environmentObject(tunnel)
                 .environmentObject(proxy)
                 .task {
-                    // Синхронизируем подробность логов с настройкой до первого log().
                     DiagLog.debugEnabled = store.settings.debugLogging
                     DiagLog.log("OLCVPN запущен")
                     await tunnel.prepare()
                 }
                 .onOpenURL { url in
-                    // Импорт профиля по ссылке olcrtc://.
-                    // НЕ проглатываем ошибку парсинга — логируем её, иначе
-                    // пользователь не узнает, почему профиль не добавился.
                     DiagLog.log("Получен URL импорта: \(url.absoluteString)")
                     do {
                         let (profile, key) = try OLCUri.parse(url.absoluteString)
@@ -40,14 +36,15 @@ struct OLCVPNApp: App {
 
 struct RootView: View {
     init() {
-        // Тёмный полупрозрачный таб-бар под стиль Aurora Glass.
-        let appearance = UITabBarAppearance()
-        appearance.configureWithDefaultBackground()
-        appearance.backgroundColor = UIColor(Theme.bgDeep.opacity(0.6))
-        UITabBar.appearance().standardAppearance = appearance
-        UITabBar.appearance().scrollEdgeAppearance = appearance
+        // Непрозрачный таб-бар: контент не просвечивает через полупрозрачный фон.
+        let tabAppearance = UITabBarAppearance()
+        tabAppearance.configureWithOpaqueBackground()
+        tabAppearance.backgroundColor = UIColor(Theme.bgDeep.opacity(0.95))
+        tabAppearance.backgroundEffect = UIBlurEffect(style: .systemUltraThinMaterial)
+        UITabBar.appearance().standardAppearance = tabAppearance
+        UITabBar.appearance().scrollEdgeAppearance = tabAppearance
 
-        // Прозрачные навигационные бары, чтобы был виден aurora-фон.
+        // Навигационный бар: полупрозрачный, чтобы aurora-фон был частично виден.
         let nav = UINavigationBarAppearance()
         nav.configureWithTransparentBackground()
         nav.titleTextAttributes = [.foregroundColor: UIColor(Theme.textPrimary)]

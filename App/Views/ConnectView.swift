@@ -68,6 +68,9 @@ struct ConnectView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 8)
                 }
+                .safeAreaInset(edge: .bottom) {
+                    Color.clear.frame(height: 0)
+                }
             }
             .navigationTitle("OLCVPN")
         }
