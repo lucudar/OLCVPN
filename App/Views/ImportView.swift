@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Импорт профиля: вставка ссылки olcrtc:// и (опционально) clientID.
 struct ImportView: View {
     @EnvironmentObject var store: ConfigStore
     @Environment(\.dismiss) private var dismiss
@@ -44,6 +43,7 @@ struct ImportView: View {
                             Label(errorText, systemImage: "exclamationmark.triangle.fill")
                                 .foregroundStyle(Theme.statusError)
                                 .font(.footnote)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         .listRowBackground(rowBg)
                     }
@@ -52,6 +52,7 @@ struct ImportView: View {
                         Text("Формат:\nolcrtc://<carrier>?<transport>@<roomID>#<key64hex>$<имя>")
                             .font(.caption.monospaced())
                             .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .listRowBackground(rowBg)
                 }
@@ -74,7 +75,6 @@ struct ImportView: View {
     private func add() {
         do {
             var (profile, key) = try OLCUri.parse(uri)
-            // Применяем глобальные настройки по умолчанию.
             profile.dns = store.settings.defaultDNS
             profile.socksPort = store.settings.defaultSocksPort
             let trimmed = clientID.trimmingCharacters(in: .whitespacesAndNewlines)

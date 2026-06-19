@@ -52,6 +52,7 @@ enum Theme {
     // Радиусы / отступы
     static let radius: CGFloat = 18
     static let radiusSmall: CGFloat = 12
+    static let hPadding: CGFloat = 16
 }
 
 // MARK: - Color hex helper
@@ -71,23 +72,31 @@ extension Color {
 
 /// Подложка под весь контент: тёмный фон + медленно дрейфующие цветные «пятна»
 /// (radial gradients), создающие эффект полярного сияния.
+///
+/// ВАЖНО: сам AuroraBackground уважает safe area. Фон и блобы расширяются
+/// за пределы safe area индивидуально через .ignoresSafeArea() на каждом,
+/// но контейнер остаётся в рамках безопасной области.
 struct AuroraBackground: View {
     @State private var animate = false
 
     var body: some View {
         ZStack {
-            Theme.bgDeep.ignoresSafeArea()
+            Theme.bgDeep
+                .ignoresSafeArea()
 
             blob(Theme.teal,   size: 460)
                 .offset(x: animate ? -120 : -160, y: animate ? -220 : -260)
+                .ignoresSafeArea()
             blob(Theme.blue,   size: 520)
                 .offset(x: animate ? 150 : 120, y: animate ? -120 : -60)
+                .ignoresSafeArea()
             blob(Theme.indigo, size: 480)
                 .offset(x: animate ? -90 : -40, y: animate ? 260 : 320)
+                .ignoresSafeArea()
             blob(Theme.green,  size: 380)
                 .offset(x: animate ? 160 : 200, y: animate ? 260 : 300)
+                .ignoresSafeArea()
         }
-        .ignoresSafeArea()
         .onAppear {
             withAnimation(.easeInOut(duration: 14).repeatForever(autoreverses: true)) {
                 animate = true
@@ -174,6 +183,7 @@ struct PillLabel: View {
         HStack(spacing: 6) {
             if let systemImage { Image(systemName: systemImage).font(.caption2) }
             Text(text).font(.caption.weight(.medium))
+                .fixedSize(horizontal: false, vertical: true)
         }
         .foregroundStyle(color)
         .padding(.vertical, 5).padding(.horizontal, 10)
@@ -197,6 +207,8 @@ struct SectionTitle: View {
                 .font(.caption.weight(.bold))
                 .tracking(1.2)
                 .foregroundStyle(Theme.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(2)
         }
     }
 }

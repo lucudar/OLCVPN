@@ -1,21 +1,11 @@
 import SwiftUI
 import Combine
 
-/// Просмотр и экспорт журнала диагностики.
-///
-/// Собирает два источника:
-///   1) DiagLog (лог приложения + расширения через App Group, если доступен);
-///   2) лог расширения живьём по IPC (работает ДАЖЕ без App Group), пока туннель подключён.
-///
-/// Отображение — через переиспользуемый `LogView` (поиск, фильтры, авто-таил,
-/// цветная подсветка, копирование/шаринг).
 struct DiagnosticsView: View {
     @EnvironmentObject var tunnel: TunnelManager
     @State private var lines: [String] = []
     @State private var loading = false
     @State private var autoRefresh = false
-    /// Текущая перезагрузка — отменяем при повторном вызове, чтобы не плодить
-    /// параллельные Task, гоняющие друг друга за lines/loading.
     @State private var reloadTask: Task<Void, Never>?
 
     private let ticker = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
@@ -27,11 +17,13 @@ struct DiagnosticsView: View {
                 if autoRefresh {
                     Label("Авто-обновление включено", systemImage: "dot.radiowaves.up.forward")
                         .font(.caption).foregroundStyle(Theme.teal)
+                        .fixedSize(horizontal: false, vertical: true)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 LogView(lines: lines)
             }
-            .padding(16)
+            .padding(.horizontal, Theme.hPadding)
+            .padding(.vertical, 8)
         }
         .navigationTitle("Диагностика")
         .navigationBarTitleDisplayMode(.inline)
@@ -67,7 +59,6 @@ struct DiagnosticsView: View {
         if Task.isCancelled { return }
         loading = true
         defer { loading = false }
-        // Живой IPC-запрос лога расширения (работает, пока сессия connecting/connected).
         let live = await tunnel.fetchExtensionLog()
         if Task.isCancelled { return }
         if !live.isEmpty {

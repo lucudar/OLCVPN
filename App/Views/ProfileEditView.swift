@@ -1,7 +1,6 @@
 import SwiftUI
 import UIKit
 
-/// Редактор профиля: редактирование полей, проверка связи, экспорт olcrtc://.
 struct ProfileEditView: View {
     @EnvironmentObject var store: ConfigStore
     @Environment(\.dismiss) private var dismiss
@@ -63,6 +62,7 @@ struct ProfileEditView: View {
                 } header: { SectionTitle(text: "Маршрутизация") } footer: {
                     Text("Домены и IP из белого списка идут напрямую, минуя VPN-туннель.")
                         .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .listRowBackground(rowBg)
 
@@ -124,8 +124,6 @@ struct ProfileEditView: View {
             params[OLCTransportParam.vp8FPS] = fps.isEmpty ? nil : fps
             params[OLCTransportParam.vp8Batch] = batch.isEmpty ? nil : batch
         } else {
-            // Транспорт сменили с VP8 — выкидываем vp8-параметры, иначе они
-            // утекут в olcrtc://-ссылку и конфиг чужого транспорта.
             params[OLCTransportParam.vp8FPS] = nil
             params[OLCTransportParam.vp8Batch] = nil
         }

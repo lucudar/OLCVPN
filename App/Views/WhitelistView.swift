@@ -1,7 +1,5 @@
 import SwiftUI
 
-/// Редактор белого списка профиля: домены/IP/CIDR, которые идут напрямую мимо VPN.
-/// Использует @Binding — изменения идут в draft ProfileEditView, сохранение при «Готово» родителя.
 struct WhitelistView: View {
     @Binding var whitelist: [String]
     @State private var newEntry: String = ""
@@ -35,20 +33,23 @@ struct WhitelistView: View {
                 } footer: {
                     Text("Домены, IP-адреса и CIDR-диапазоны. Записи из списка идут напрямую, минуя VPN-туннель.")
                         .foregroundStyle(Theme.textSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .listRowBackground(rowBg)
 
                 if !whitelist.isEmpty {
                     Section {
                         ForEach(whitelist.indices, id: \.self) { idx in
-                            HStack {
+                            HStack(spacing: 8) {
                                 Image(systemName: "arrow.triangle.branch")
                                     .font(.caption)
                                     .foregroundStyle(Theme.teal.opacity(0.7))
                                 Text(whitelist[idx])
                                     .font(.system(.body, design: .monospaced))
                                     .foregroundStyle(Theme.textPrimary)
-                                Spacer()
+                                    .fixedSize(horizontal: false, vertical: true)
+                                    .lineLimit(2)
+                                Spacer(minLength: 0)
                             }
                         }
                         .onDelete { offsets in
@@ -56,10 +57,6 @@ struct WhitelistView: View {
                                 whitelist.remove(atOffsets: offsets)
                             }
                         }
-                        .transition(.asymmetric(
-                            insertion: .move(edge: .trailing).combined(with: .opacity),
-                            removal: .move(edge: .leading).combined(with: .opacity)
-                        ))
                     } header: {
                         SectionTitle(text: "Записи (\(whitelist.count))")
                     }
@@ -77,6 +74,7 @@ struct WhitelistView: View {
                                 Text("Весь трафик идёт через VPN")
                                     .font(.caption)
                                     .foregroundStyle(Theme.textSecondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             Spacer()
                         }

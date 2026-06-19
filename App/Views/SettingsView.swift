@@ -1,6 +1,5 @@
 import SwiftUI
 
-/// Экран настроек: состояние, редактор активного профиля, глобальные настройки, диагностика.
 struct SettingsView: View {
     @EnvironmentObject var store: ConfigStore
     @EnvironmentObject var tunnel: TunnelManager
@@ -52,6 +51,7 @@ struct SettingsView: View {
                     } header: { sectionHeader("Настройки по умолчанию") } footer: {
                         Text("DNS и порт применяются к новым импортированным профилям. Логи влияют на ядро при следующем подключении.")
                             .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     .listRowBackground(rowBg)
 
@@ -90,9 +90,15 @@ struct SettingsView: View {
 
     private func statusRow(_ title: String, _ value: String, color: Color) -> some View {
         HStack {
-            Text(title).foregroundStyle(Theme.textPrimary)
-            Spacer()
-            Text(value).foregroundStyle(color).multilineTextAlignment(.trailing)
+            Text(title)
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            Text(value)
+                .foregroundStyle(color)
+                .multilineTextAlignment(.trailing)
+                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(3)
         }
     }
 

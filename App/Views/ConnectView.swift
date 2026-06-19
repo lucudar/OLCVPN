@@ -31,12 +31,17 @@ struct ConnectView: View {
                                 .foregroundStyle(statusColor)
                                 .contentTransition(.opacity)
                                 .animation(.easeInOut(duration: 0.3), value: tunnel.statusText)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.center)
                             Text(subtitle)
                                 .font(.footnote)
                                 .foregroundStyle(Theme.textSecondary)
                                 .contentTransition(.opacity)
                                 .animation(.easeInOut(duration: 0.3), value: subtitle)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .multilineTextAlignment(.center)
                         }
+                        .frame(maxWidth: .infinity)
 
                         profileCard
                             .opacity(cardAppeared ? 1 : 0)
@@ -51,6 +56,7 @@ struct ConnectView: View {
                             Label(err, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
                                 .foregroundStyle(Theme.statusError)
+                                .fixedSize(horizontal: false, vertical: true)
                                 .multilineTextAlignment(.leading)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                                 .glassCard(padding: 12)
@@ -65,11 +71,8 @@ struct ConnectView: View {
 
                         Spacer(minLength: 20)
                     }
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, Theme.hPadding)
                     .padding(.vertical, 8)
-                }
-                .safeAreaInset(edge: .bottom) {
-                    Color.clear.frame(height: 0)
                 }
             }
             .navigationTitle("OLCVPN")
@@ -100,12 +103,14 @@ struct ConnectView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(p.name).font(.subheadline.weight(.semibold))
                         .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
                     HStack(spacing: 6) {
                         PillLabel(text: p.carrier.rawValue, color: p.carrier.tint)
                         PillLabel(text: p.transport.title, color: Theme.blue)
                     }
                 }
-                Spacer()
+                Spacer(minLength: 4)
             }
             .glassCard()
             .id(p.id)
@@ -113,7 +118,9 @@ struct ConnectView: View {
         } else {
             HStack {
                 Image(systemName: "tray").foregroundStyle(Theme.textSecondary)
-                Text("Нет активного профиля").foregroundStyle(Theme.textSecondary)
+                Text("Нет активного профиля")
+                    .foregroundStyle(Theme.textSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Spacer()
             }
             .glassCard()
@@ -176,14 +183,12 @@ private struct ConnectionOrb: View {
 
     var body: some View {
         ZStack {
-            // Внешнее свечение
             Circle()
                 .fill(color.opacity(connected ? 0.30 : 0.12))
                 .frame(width: 230, height: 230)
                 .blur(radius: 40)
                 .scaleEffect(pulse ? 1.08 : 0.94)
 
-            // Второе кольцо-пульс (при подключении)
             if connected || busy {
                 Circle()
                     .stroke(color.opacity(ringPulse ? 0.0 : 0.35), lineWidth: 2)
@@ -192,7 +197,6 @@ private struct ConnectionOrb: View {
                     .opacity(ringPulse ? 0 : 1)
             }
 
-            // Вращающееся градиент-кольцо
             Circle()
                 .trim(from: 0, to: busy ? 0.7 : 1)
                 .stroke(connected || busy ? AnyShapeStyle(Theme.aurora)
@@ -201,7 +205,6 @@ private struct ConnectionOrb: View {
                 .frame(width: 188, height: 188)
                 .rotationEffect(.degrees(busy ? spin : 0))
 
-            // Стеклянная сердцевина
             Circle()
                 .fill(.ultraThinMaterial)
                 .frame(width: 150, height: 150)
@@ -217,9 +220,7 @@ private struct ConnectionOrb: View {
         .onAppear { startAnimations() }
         .onChange(of: busy) { _ in startAnimations() }
         .onChange(of: connected) { _ in
-            withAnimation(.easeInOut(duration: 0.5)) {
-                // Trigger re-render of color/glow
-            }
+            withAnimation(.easeInOut(duration: 0.5)) {}
             startAnimations()
         }
     }

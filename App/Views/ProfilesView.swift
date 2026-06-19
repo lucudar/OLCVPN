@@ -15,33 +15,15 @@ struct ProfilesView: View {
                     emptyState
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 } else {
-                    List {
-                        ForEach(store.profiles) { p in
-                            row(for: p)
-                                .listRowBackground(Color.clear)
-                                .listRowSeparator(.hidden)
-                                .listRowInsets(EdgeInsets(top: 6, leading: 16, bottom: 6, trailing: 16))
-                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                    Button(role: .destructive) {
-                                        withAnimation(.easeInOut(duration: 0.3)) {
-                                            store.delete(p)
-                                        }
-                                    } label: {
-                                        Label("Удалить", systemImage: "trash")
-                                    }
-                                    Button { editing = p } label: {
-                                        Label("Изменить", systemImage: "slider.horizontal.3")
-                                    }
-                                    .tint(Theme.blue)
-                                }
-                                .transition(.asymmetric(
-                                    insertion: .move(edge: .trailing).combined(with: .opacity),
-                                    removal: .move(edge: .leading).combined(with: .opacity)
-                                ))
+                    ScrollView {
+                        LazyVStack(spacing: 10) {
+                            ForEach(store.profiles) { p in
+                                row(for: p)
+                            }
                         }
+                        .padding(.horizontal, Theme.hPadding)
+                        .padding(.vertical, 8)
                     }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: store.profiles)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 30)
@@ -84,6 +66,8 @@ struct ProfilesView: View {
                 VStack(alignment: .leading, spacing: 5) {
                     Text(p.name).font(.body.weight(.semibold))
                         .foregroundStyle(Theme.textPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .lineLimit(2)
                     HStack(spacing: 6) {
                         PillLabel(text: p.carrier.rawValue, color: p.carrier.tint)
                         PillLabel(text: p.transport.title, color: Theme.blue)
@@ -91,6 +75,7 @@ struct ProfilesView: View {
                     Text(p.roomID)
                         .font(.caption2).foregroundStyle(Theme.textSecondary)
                         .lineLimit(1).truncationMode(.middle)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 Spacer(minLength: 4)
 
@@ -123,6 +108,7 @@ struct ProfilesView: View {
                 .font(.subheadline)
                 .foregroundStyle(Theme.textSecondary)
                 .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
             Button { showingImport = true } label: {
                 Label("Добавить профиль", systemImage: "plus")
             }
@@ -130,5 +116,6 @@ struct ProfilesView: View {
             .padding(.top, 4)
         }
         .padding(32)
+        .padding(.horizontal, Theme.hPadding)
     }
 }
