@@ -73,30 +73,39 @@ extension Color {
 /// Подложка под весь контент: тёмный фон + медленно дрейфующие цветные «пятна»
 /// (radial gradients), создающие эффект полярного сияния.
 ///
-/// ВАЖНО: сам AuroraBackground уважает safe area. Фон и блобы расширяются
-/// за пределы safe area индивидуально через .ignoresSafeArea() на каждом,
-/// но контейнер остаётся в рамках безопасной области.
+/// ВАЖНО: фон ДОЛЖЕН быть нейтральным к layout. Раньше «пятна» задавались
+/// фиксированными размерами 460–520pt, а так как `.offset` и `.ignoresSafeArea()`
+/// прозрачны для системы компоновки, каждый круг сообщал родителю свой полный
+/// размер. Из-за этого внутренний `ZStack` фона (и, как следствие, корневой
+/// `ZStack` каждого экрана) становился ~520pt шириной — шире экрана — и контент
+/// обрезался с обеих сторон.
+///
+/// Решение: оборачиваем «пятна» в `GeometryReader`, фиксируем внутренний `ZStack`
+/// строго по размеру экрана и обрезаем (`.clipped()`). Теперь фон занимает ровно
+/// доступную область и никогда не растягивает контент за пределы экрана.
 struct AuroraBackground: View {
     @State private var animate = false
 
     var body: some View {
-        ZStack {
-            Theme.bgDeep
-                .ignoresSafeArea()
+        GeometryReader { geo in
+            ZStack {
+                Theme.bgDeep
 
-            blob(Theme.teal,   size: 460)
-                .offset(x: animate ? -120 : -160, y: animate ? -220 : -260)
-                .ignoresSafeArea()
-            blob(Theme.blue,   size: 520)
-                .offset(x: animate ? 150 : 120, y: animate ? -120 : -60)
-                .ignoresSafeArea()
-            blob(Theme.indigo, size: 480)
-                .offset(x: animate ? -90 : -40, y: animate ? 260 : 320)
-                .ignoresSafeArea()
-            blob(Theme.green,  size: 380)
-                .offset(x: animate ? 160 : 200, y: animate ? 260 : 300)
-                .ignoresSafeArea()
+                blob(Theme.teal,   size: 460)
+                    .offset(x: animate ? -120 : -160, y: animate ? -220 : -260)
+                blob(Theme.blue,   size: 520)
+                    .offset(x: animate ? 150 : 120, y: animate ? -120 : -60)
+                blob(Theme.indigo, size: 480)
+                    .offset(x: animate ? -90 : -40, y: animate ? 260 : 320)
+                blob(Theme.green,  size: 380)
+                    .offset(x: animate ? 160 : 200, y: animate ? 260 : 300)
+            }
+            // Жёстко фиксируем размер по экрану, чтобы крупные «пятна»
+            // не влияли на компоновку, и обрезаем всё, что выходит за края.
+            .frame(width: geo.size.width, height: geo.size.height)
+            .clipped()
         }
+        .ignoresSafeArea()
         .onAppear {
             withAnimation(.easeInOut(duration: 14).repeatForever(autoreverses: true)) {
                 animate = true
