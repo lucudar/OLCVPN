@@ -11,6 +11,24 @@ fi
 ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$ROOT"
 
+echo "==> [0/4] генерация иконки приложения (best-effort)"
+# Иконка рисуется скриптом Scripts/make_icon.py (Pillow) в изолированном venv.
+# Если python3/pillow недоступны — остаётся уже лежащая в репо icon-1024.png
+# (не роняем сборку из-за иконки).
+if command -v python3 >/dev/null 2>&1; then
+  ICON_VENV="${TMPDIR:-/tmp}/olc-iconvenv"
+  if python3 -m venv "$ICON_VENV" >/dev/null 2>&1 \
+     && "$ICON_VENV/bin/pip" install --quiet --upgrade pip >/dev/null 2>&1 \
+     && "$ICON_VENV/bin/pip" install --quiet pillow >/dev/null 2>&1 \
+     && "$ICON_VENV/bin/python" Scripts/make_icon.py; then
+    echo "    → иконка сгенерирована"
+  else
+    echo "    → не удалось сгенерировать иконку, использую существующую icon-1024.png" >&2
+  fi
+else
+  echo "    → python3 не найден, использую существующую icon-1024.png" >&2
+fi
+
 echo "==> [1/4] gomobile bind -> Olcrtc.xcframework"
 command -v gomobile >/dev/null || {
   go install golang.org/x/mobile/cmd/gomobile@latest

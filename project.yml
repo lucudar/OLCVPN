@@ -13,9 +13,9 @@ settings:
     SWIFT_VERSION: "5.9"
     # Версия по семантике (MAJOR.MINOR.PATCH). Поднимаем на каждом изменении:
     #   PATCH — исправления багов, MINOR — новые фичи, MAJOR — крупные несовместимые изменения.
-    MARKETING_VERSION: "1.2.1"
+    MARKETING_VERSION: "1.2.2"
     # Номер сборки — целое число, растёт на каждый билд.
-    CURRENT_PROJECT_VERSION: "5"
+    CURRENT_PROJECT_VERSION: "6"
 
 targets:
   OLCVPN:
