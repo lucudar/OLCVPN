@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 @main
 struct OLCVPNApp: App {
@@ -31,21 +32,40 @@ struct OLCVPNApp: App {
                         DiagLog.error("Не удалось разобрать ссылку импорта: \(error.localizedDescription)")
                     }
                 }
+                .tint(Theme.teal)
+                .preferredColorScheme(.dark)
         }
     }
 }
 
 struct RootView: View {
+    init() {
+        // Тёмный полупрозрачный таб-бар под стиль Aurora Glass.
+        let appearance = UITabBarAppearance()
+        appearance.configureWithDefaultBackground()
+        appearance.backgroundColor = UIColor(Theme.bgDeep.opacity(0.6))
+        UITabBar.appearance().standardAppearance = appearance
+        UITabBar.appearance().scrollEdgeAppearance = appearance
+
+        // Прозрачные навигационные бары, чтобы был виден aurora-фон.
+        let nav = UINavigationBarAppearance()
+        nav.configureWithTransparentBackground()
+        nav.titleTextAttributes = [.foregroundColor: UIColor(Theme.textPrimary)]
+        nav.largeTitleTextAttributes = [.foregroundColor: UIColor(Theme.textPrimary)]
+        UINavigationBar.appearance().standardAppearance = nav
+        UINavigationBar.appearance().scrollEdgeAppearance = nav
+    }
+
     var body: some View {
         TabView {
             ConnectView()
-                .tabItem { Label("Подключение", systemImage: "bolt.horizontal.circle") }
+                .tabItem { Label("Подключение", systemImage: "bolt.horizontal.circle.fill") }
             ProfilesView()
-                .tabItem { Label("Профили", systemImage: "list.bullet") }
+                .tabItem { Label("Профили", systemImage: "square.stack.3d.up.fill") }
             ProxyTestView()
                 .tabItem { Label("Прокси", systemImage: "network") }
             SettingsView()
-                .tabItem { Label("Настройки", systemImage: "gearshape") }
+                .tabItem { Label("Настройки", systemImage: "gearshape.fill") }
         }
     }
 }

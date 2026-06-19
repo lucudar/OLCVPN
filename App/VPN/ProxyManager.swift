@@ -20,10 +20,20 @@ final class ProxyManager: ObservableObject {
         DispatchQueue.main.async(execute: block)
     }
 
+    /// Максимум строк в UI-логе (общий кап и для наших строк, и для [core]).
+    private static let maxLogLines = 1200
+
     private func append(_ s: String) {
         DiagLog.log(s, tag: "proxy")
         let line = "[\(ProxyManager.ts())] \(s)"
-        ui { self.log.append(line) }
+        ui {
+            self.log.append(line)
+            // Раньше тримминг был только в appendCore — наши строки росли без
+            // предела на длинной сессии. Кап общий.
+            if self.log.count > ProxyManager.maxLogLines {
+                self.log.removeFirst(self.log.count - ProxyManager.maxLogLines)
+            }
+        }
     }
 
     /// Строка внутреннего лога ядра ([pc]/[ice]/jitsi/smux), перехваченная
@@ -36,15 +46,20 @@ final class ProxyManager: ObservableObject {
         guard !parts.isEmpty else { return }
         ui {
             for p in parts { self.log.append("[core] " + String(p)) }
-            if self.log.count > 1200 { self.log.removeFirst(self.log.count - 1200) }
+            if self.log.count > ProxyManager.maxLogLines {
+                self.log.removeFirst(self.log.count - ProxyManager.maxLogLines)
+            }
         }
     }
 
-    private static func ts() -> String {
+    /// Кэшированный форматтер времени — раньше создавался на КАЖДУЮ строку лога.
+    private static let tsFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
-        return f.string(from: Date())
-    }
+        return f
+    }()
+
+    private static func ts() -> String { tsFormatter.string(from: Date()) }
 
     private static func ms(_ from: Date) -> Int { Int(Date().timeIntervalSince(from) * 1000) }
 

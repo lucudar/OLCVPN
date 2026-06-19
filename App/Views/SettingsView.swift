@@ -17,55 +17,82 @@ struct SettingsView: View {
 
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Состояние") {
-                    LabeledContent("VPN", value: tunnel.statusText)
-                    LabeledContent("Профиль", value: store.activeProfile?.name ?? "не выбран")
-                }
+            ZStack {
+                AuroraBackground()
+                Form {
+                    Section {
+                        statusRow("VPN", tunnel.statusText,
+                                  color: tunnel.isConnected ? Theme.statusOn : Theme.textSecondary)
+                        statusRow("Профиль", store.activeProfile?.name ?? "не выбран", color: Theme.textPrimary)
+                    } header: { sectionHeader("Состояние") }
+                    .listRowBackground(rowBg)
 
-                if let p = store.activeProfile {
-                    Section("Активный профиль") {
+                    if let p = store.activeProfile {
+                        Section {
+                            NavigationLink {
+                                ProfileEditView(profile: p)
+                            } label: {
+                                Label { Text("Редактировать «\(p.name)»") } icon: {
+                                    Image(systemName: "slider.horizontal.3").foregroundStyle(Theme.teal)
+                                }
+                            }
+                            statusRow("Транспорт", p.transport.title, color: Theme.textSecondary)
+                            statusRow("DNS", p.dns, color: Theme.textSecondary)
+                            statusRow("SOCKS-порт", String(p.socksPort), color: Theme.textSecondary)
+                        } header: { sectionHeader("Активный профиль") }
+                        .listRowBackground(rowBg)
+                    }
+
+                    Section {
+                        TextField("DNS по умолчанию", text: $dns)
+                            .textInputAutocapitalization(.never).autocorrectionDisabled(true)
+                        TextField("SOCKS-порт по умолчанию", text: $portText)
+                            .keyboardType(.numberPad)
+                        Toggle("Подробные логи", isOn: $debug).tint(Theme.teal)
+                    } header: { sectionHeader("Настройки по умолчанию") } footer: {
+                        Text("DNS и порт применяются к новым импортированным профилям. Логи влияют на ядро при следующем подключении.")
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .listRowBackground(rowBg)
+
+                    Section {
                         NavigationLink {
-                            ProfileEditView(profile: p)
+                            DiagnosticsView()
                         } label: {
-                            LabeledContent("Редактировать", value: p.name)
+                            Label { Text("Журнал диагностики") } icon: {
+                                Image(systemName: "doc.text.magnifyingglass").foregroundStyle(Theme.teal)
+                            }
                         }
-                        LabeledContent("Транспорт", value: p.transport.title)
-                        LabeledContent("DNS", value: p.dns)
-                        LabeledContent("SOCKS-порт", value: String(p.socksPort))
-                    }
-                }
+                    } header: { sectionHeader("Диагностика") }
+                    .listRowBackground(rowBg)
 
-                Section {
-                    TextField("DNS по умолчанию", text: $dns)
-                        .textInputAutocapitalization(.never).autocorrectionDisabled(true)
-                    TextField("SOCKS-порт по умолчанию", text: $portText)
-                        .keyboardType(.numberPad)
-                    Toggle("Подробные логи", isOn: $debug)
-                } header: {
-                    Text("Настройки по умолчанию")
-                } footer: {
-                    Text("DNS и порт применяются к новым импортированным профилям. Логи влияют на ядро при следующем подключении.")
+                    Section {
+                        statusRow("Версия", appVersion, color: Theme.textSecondary)
+                        statusRow("Ядро", "olcRTC + hev-socks5-tunnel", color: Theme.textSecondary)
+                    } header: { sectionHeader("О приложении") }
+                    .listRowBackground(rowBg)
                 }
-
-                Section("Диагностика") {
-                    NavigationLink {
-                        DiagnosticsView()
-                    } label: {
-                        Label("Журнал диагностики", systemImage: "doc.text.magnifyingglass")
-                    }
-                }
-
-                Section("О приложении") {
-                    LabeledContent("Версия", value: appVersion)
-                    LabeledContent("Ядро", value: "olcRTC + hev-socks5-tunnel")
-                }
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Настройки")
             .onAppear(perform: loadSettings)
             .onChange(of: dns) { _ in saveSettings() }
             .onChange(of: portText) { _ in saveSettings() }
             .onChange(of: debug) { _ in saveSettings() }
+        }
+    }
+
+    private var rowBg: some View { Color.white.opacity(0.05) }
+
+    private func sectionHeader(_ t: String) -> some View {
+        SectionTitle(text: t)
+    }
+
+    private func statusRow(_ title: String, _ value: String, color: Color) -> some View {
+        HStack {
+            Text(title).foregroundStyle(Theme.textPrimary)
+            Spacer()
+            Text(value).foregroundStyle(color).multilineTextAlignment(.trailing)
         }
     }
 

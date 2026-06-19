@@ -10,41 +10,52 @@ struct ImportView: View {
     @State private var clientID: String = ""
     @State private var errorText: String?
 
+    private var rowBg: some View { Color.white.opacity(0.05) }
+
     var body: some View {
         NavigationStack {
-            Form {
-                Section("Ссылка olcrtc://") {
-                    TextField("olcrtc://...", text: $uri, axis: .vertical)
-                        .lineLimit(2...5)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                        .font(.system(.body, design: .monospaced))
-                    Button {
-                        if let s = UIPasteboard.general.string { uri = s }
-                    } label: {
-                        Label("Вставить из буфера", systemImage: "doc.on.clipboard")
-                    }
-                }
-
-                Section("Параметры") {
-                    TextField("Client ID (необязательно)", text: $clientID)
-                        .textInputAutocapitalization(.never)
-                        .autocorrectionDisabled(true)
-                }
-
-                if let errorText {
+            ZStack {
+                AuroraBackground()
+                Form {
                     Section {
-                        Text(errorText)
-                            .foregroundStyle(.red)
-                            .font(.footnote)
-                    }
-                }
+                        TextField("olcrtc://...", text: $uri, axis: .vertical)
+                            .lineLimit(2...5)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .font(.system(.body, design: .monospaced))
+                        Button {
+                            if let s = UIPasteboard.general.string { uri = s }
+                        } label: {
+                            Label("Вставить из буфера", systemImage: "doc.on.clipboard")
+                                .foregroundStyle(Theme.teal)
+                        }
+                    } header: { SectionTitle(text: "Ссылка olcrtc://", systemImage: "link") }
+                    .listRowBackground(rowBg)
 
-                Section {
-                    Text("Формат: olcrtc://<carrier>?<transport>@<roomID>#<key64hex>$<имя>")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Section {
+                        TextField("Client ID (необязательно)", text: $clientID)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                    } header: { SectionTitle(text: "Параметры") }
+                    .listRowBackground(rowBg)
+
+                    if let errorText {
+                        Section {
+                            Label(errorText, systemImage: "exclamationmark.triangle.fill")
+                                .foregroundStyle(Theme.statusError)
+                                .font(.footnote)
+                        }
+                        .listRowBackground(rowBg)
+                    }
+
+                    Section {
+                        Text("Формат:\nolcrtc://<carrier>?<transport>@<roomID>#<key64hex>$<имя>")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(Theme.textSecondary)
+                    }
+                    .listRowBackground(rowBg)
                 }
+                .scrollContentBackground(.hidden)
             }
             .navigationTitle("Импорт профиля")
             .toolbar {
@@ -54,6 +65,7 @@ struct ImportView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Добавить") { add() }
                         .disabled(uri.isEmpty)
+                        .fontWeight(.semibold)
                 }
             }
         }

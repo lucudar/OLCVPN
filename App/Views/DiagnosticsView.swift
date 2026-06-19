@@ -1,27 +1,37 @@
 import SwiftUI
-import UIKit
+import Combine
 
 /// Просмотр и экспорт журнала диагностики.
 ///
 /// Собирает два источника:
 ///   1) DiagLog (лог приложения + расширения через App Group, если доступен);
 ///   2) лог расширения живьём по IPC (работает ДАЖЕ без App Group), пока туннель подключён.
+///
+/// Отображение — через переиспользуемый `LogView` (поиск, фильтры, авто-таил,
+/// цветная подсветка, копирование/шаринг).
 struct DiagnosticsView: View {
     @EnvironmentObject var tunnel: TunnelManager
-    @State private var text: String = ""
-    @State private var showShare = false
+    @State private var lines: [String] = []
     @State private var loading = false
-    /// Храним текущую перезагрузку, чтобы отменять её при повторном onAppear
-    /// (иначе плодятся параллельные Task, гоняющие друг друга за text/loading).
+    @State private var autoRefresh = false
+    /// Текущая перезагрузка — отменяем при повторном вызове, чтобы не плодить
+    /// параллельные Task, гоняющие друг друга за lines/loading.
     @State private var reloadTask: Task<Void, Never>?
 
+    private let ticker = Timer.publish(every: 1.5, on: .main, in: .common).autoconnect()
+
     var body: some View {
-        ScrollView {
-            Text(text.isEmpty ? "Журнал пуст" : text)
-                .font(.system(.footnote, design: .monospaced))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .textSelection(.enabled)
-                .padding()
+        ZStack {
+            AuroraBackground()
+            VStack(spacing: 12) {
+                if autoRefresh {
+                    Label("Авто-обновление включено", systemImage: "dot.radiowaves.up.forward")
+                        .font(.caption).foregroundStyle(Theme.teal)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                LogView(lines: lines)
+            }
+            .padding(16)
         }
         .navigationTitle("Диагностика")
         .navigationBarTitleDisplayMode(.inline)
@@ -29,11 +39,14 @@ struct DiagnosticsView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Menu {
                     Button { reload() } label: { Label("Обновить", systemImage: "arrow.clockwise") }
-                    Button { showShare = true } label: { Label("Экспорт", systemImage: "square.and.arrow.up") }
+                    Toggle(isOn: $autoRefresh) {
+                        Label("Авто-обновление", systemImage: "timer")
+                    }
+                    Divider()
                     Button(role: .destructive) {
                         DiagLog.clear()
                         UserDefaults.standard.removeObject(forKey: TunnelManager.extLogKey)
-                        Task { _ = await tunnel.sendCommand("clearlog") ; reload() }
+                        Task { _ = await tunnel.sendCommand("clearlog"); reload() }
                     } label: { Label("Очистить", systemImage: "trash") }
                 } label: {
                     Image(systemName: loading ? "ellipsis" : "ellipsis.circle")
@@ -41,23 +54,16 @@ struct DiagnosticsView: View {
             }
         }
         .onAppear(perform: reload)
-        .sheet(isPresented: $showShare) {
-            ShareSheet(items: [text.isEmpty ? "(пусто)" : text])
-        }
+        .onReceive(ticker) { _ in if autoRefresh { reload() } }
     }
 
     private func reload() {
-        // Отменяем предыдущую перезагрузку, если она ещё бежит — onAppear
-        // может срабатывать часто (переходы по табам), и без отменки
-        // накапливались бы параллельные Task.
         reloadTask?.cancel()
         reloadTask = Task { await reloadAsync() }
     }
 
     @MainActor
     private func reloadAsync() async {
-        // Если эту перезагрузку уже отменили (пришёл новый onAppear) — выходим,
-        // не затирая text/loading более свежей задачей.
         if Task.isCancelled { return }
         loading = true
         defer { loading = false }
@@ -76,15 +82,6 @@ struct DiagnosticsView: View {
             parts.append("=== РАСШИРЕНИЕ (IPC) ===\n" + ext)
         }
         if Task.isCancelled { return }
-        text = parts.joined(separator: "\n\n")
+        lines = parts.joined(separator: "\n").split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
     }
-}
-
-/// Обёртка UIActivityViewController для экспорта/шаринга.
-struct ShareSheet: UIViewControllerRepresentable {
-    let items: [Any]
-    func makeUIViewController(context: Context) -> UIActivityViewController {
-        UIActivityViewController(activityItems: items, applicationActivities: nil)
-    }
-    func updateUIViewController(_ vc: UIActivityViewController, context: Context) {}
 }

@@ -14,10 +14,12 @@ final class TunnelLog {
     private let queue = DispatchQueue(label: "olc.tunnellog")
     private var lines: [String] = []
     private let maxLines = 2000
-    private let iso = ISO8601DateFormatter()
+    /// Статический потокобезопасный ISO-форматтер (формирование строки даты у
+    /// ISO8601DateFormatter потокобезопасно), один на процесс.
+    private static let iso = ISO8601DateFormatter()
 
     func log(_ message: String, tag: String = "tunnel") {
-        let line = "[\(iso.string(from: Date()))] [\(tag)] \(message)"
+        let line = "[\(TunnelLog.iso.string(from: Date()))] [\(tag)] \(message)"
         queue.sync {
             lines.append(line)
             if lines.count > maxLines { lines.removeFirst(lines.count - maxLines) }

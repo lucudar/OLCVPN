@@ -12,6 +12,10 @@ enum DiagLog {
     /// extension — из cfg.debug (приходит через providerConfiguration).
     static var debugEnabled: Bool = true
 
+    /// Кэшированный ISO-форматтер — раньше создавался на каждую запись лога
+    /// (дорого и в app, и в extension, который логирует ядро построчно).
+    private static let isoFormatter = ISO8601DateFormatter()
+
     private static var fileURL: URL? {
         if let group = FileManager.default
             .containerURL(forSecurityApplicationGroupIdentifier: OLC.appGroup) {
@@ -27,7 +31,7 @@ enum DiagLog {
     }
 
     static func log(_ message: String, tag: String = "app") {
-        let ts = ISO8601DateFormatter().string(from: Date())
+        let ts = isoFormatter.string(from: Date())
         // Дублируем в системный журнал iOS. Его видно через idevicesyslog /
         // Console ДАЖЕ когда App Group недоступен (например при подписи ESign).
         // Фильтруй по префиксу OLCVPN.
