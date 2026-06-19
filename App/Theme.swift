@@ -117,10 +117,16 @@ struct AuroraBackground: View {
 /// Тонкая статичная рамка-круг с бегущей по ней светлой дугой —
 /// главный декоративный элемент минималистичного дизайна.
 ///
+/// АНИМАЦИЯ (исправлено в 1.2.0): вращение драйвится через `TimelineView(.animation)`,
+/// а не через `withAnimation(...).repeatForever(...)`. Раньше repeatForever-анимация
+/// «срывалась» / дёргалась: любой ре-рендер родителя (смена статуса, implicit-анимации
+/// рядом) и возврат из фона перезапускали/останавливали её. `TimelineView` идёт по
+/// собственным часам и не зависит от внешних изменений состояния — движение плавное.
+///
 /// - Parameters:
 ///   - size: диаметр кольца;
 ///   - lineWidth: толщина линии;
-///   - active: `true` — дуга вращается, `false` — стоит на месте;
+///   - active: `true` — дуга вращается, `false` — стоит на месте (часы на паузе);
 ///   - progress: длина бегущей дуги (доля окружности, 0…1);
 ///   - duration: период полного оборота, сек.
 struct RotatingRing: View {
@@ -130,37 +136,37 @@ struct RotatingRing: View {
     var progress: CGFloat = 0.25
     var duration: Double = 2.2
 
-    @State private var angle: Double = 0
-
     var body: some View {
-        ZStack {
-            // Статичная рамка
-            Circle()
-                .stroke(Theme.stroke, lineWidth: lineWidth)
+        TimelineView(.animation(minimumInterval: 1.0 / 60.0, paused: !active)) { context in
+            let angle = rotation(at: context.date)
+            ZStack {
+                // Статичная рамка
+                Circle()
+                    .stroke(Theme.stroke, lineWidth: lineWidth)
 
-            // Бегущая дуга (хвост гаснет → ведущая точка яркая)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(
-                    AngularGradient(
-                        gradient: Gradient(colors: [Color.white.opacity(0), Color.white]),
-                        center: .center,
-                        startAngle: .degrees(0),
-                        endAngle: .degrees(Double(progress) * 360)),
-                    style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
-                .rotationEffect(.degrees(angle))
+                // Бегущая дуга (хвост гаснет → ведущая точка яркая)
+                Circle()
+                    .trim(from: 0, to: progress)
+                    .stroke(
+                        AngularGradient(
+                            gradient: Gradient(colors: [Color.white.opacity(0), Color.white]),
+                            center: .center,
+                            startAngle: .degrees(0),
+                            endAngle: .degrees(Double(progress) * 360)),
+                        style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                    .rotationEffect(.degrees(angle))
+            }
+            .frame(width: size, height: size)
         }
         .frame(width: size, height: size)
-        .onAppear { restart() }
-        .onChange(of: active) { _ in restart() }
     }
 
-    private func restart() {
-        angle = 0
-        guard active else { return }
-        withAnimation(.linear(duration: duration).repeatForever(autoreverses: false)) {
-            angle = 360
-        }
+    /// Угол поворота от текущего времени (непрерывный, без рывков на переходе 360→ 0).
+    private func rotation(at date: Date) -> Double {
+        guard active, duration > 0 else { return 0 }
+        let t = date.timeIntervalSinceReferenceDate
+        let fraction = t.truncatingRemainder(dividingBy: duration) / duration
+        return fraction * 360
     }
 }
 

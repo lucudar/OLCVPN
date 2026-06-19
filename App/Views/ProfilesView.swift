@@ -15,15 +15,28 @@ struct ProfilesView: View {
                     emptyState
                         .transition(.opacity.combined(with: .scale(scale: 0.9)))
                 } else {
-                    ScrollView {
-                        LazyVStack(spacing: 10) {
-                            ForEach(store.profiles) { p in
-                                row(for: p)
-                            }
+                    List {
+                        ForEach(store.profiles) { p in
+                            row(for: p)
+                                .listRowBackground(Color.clear)
+                                .listRowSeparator(.hidden)
+                                .listRowInsets(EdgeInsets(top: 5, leading: Theme.hPadding,
+                                                          bottom: 5, trailing: Theme.hPadding))
+                                // Свайп влево → удалить профиль (полный свайп удаляет сразу)
+                                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                    Button(role: .destructive) {
+                                        withAnimation(.spring(response: 0.4, dampingFraction: 0.8)) {
+                                            store.delete(p)
+                                        }
+                                    } label: {
+                                        Label("Удалить", systemImage: "trash.fill")
+                                    }
+                                }
                         }
-                        .padding(.horizontal, Theme.hPadding)
-                        .padding(.vertical, 8)
                     }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
+                    .background(Color.clear)
                     .animation(.spring(response: 0.4, dampingFraction: 0.8), value: store.profiles)
                     .opacity(appeared ? 1 : 0)
                     .offset(y: appeared ? 0 : 30)
@@ -101,7 +114,7 @@ struct ProfilesView: View {
         VStack(spacing: 14) {
             Image(systemName: "tray.full")
                 .font(.system(size: 52))
-                .foregroundStyle(Theme.teal.opacity(0.7))
+                .foregroundStyle(Theme.textSecondary.opacity(0.7))
             Text("Нет профилей").font(.title3.weight(.semibold))
                 .foregroundStyle(Theme.textPrimary)
             Text("Добавь профиль по ссылке olcrtc:// или вручную — кнопка «+» справа сверху.")

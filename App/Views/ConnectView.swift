@@ -87,7 +87,7 @@ struct ConnectView: View {
 
     private var subtitle: String {
         if tunnel.isConnected { return "Трафик идёт через защищённый туннель" }
-        if tunnel.isBusy { return "Устанавливаю соединение через WebRTC…" }
+        if tunnel.isBusy { return "Устанавливаю соединение через WebRTC… можно отменить" }
         return store.activeProfile == nil ? "Добавь профиль во вкладке «Профили»" : "Готов к подключению"
     }
 
@@ -130,7 +130,8 @@ struct ConnectView: View {
 
     private var connectButton: some View {
         Button {
-            if tunnel.isConnected {
+            // Подключено или идёт подключение — кнопка отключает/отменяет.
+            if tunnel.isConnected || tunnel.isBusy {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     tunnel.disconnect()
                 }
@@ -147,18 +148,24 @@ struct ConnectView: View {
         } label: {
             HStack(spacing: 8) {
                 if tunnel.isBusy { ProgressView().tint(.black) }
-                Image(systemName: tunnel.isConnected ? "power" : "bolt.fill")
+                Image(systemName: buttonIcon)
                 Text(buttonTitle)
             }
         }
         .buttonStyle(AuroraButtonStyle())
-        .disabled(store.activeProfile == nil || tunnel.isBusy)
+        .disabled(store.activeProfile == nil)
         .opacity(store.activeProfile == nil ? 0.5 : 1)
         .animation(.easeInOut(duration: 0.2), value: tunnel.isConnected)
+        .animation(.easeInOut(duration: 0.2), value: tunnel.isBusy)
+    }
+
+    private var buttonIcon: String {
+        if tunnel.isBusy { return "xmark" }
+        return tunnel.isConnected ? "power" : "bolt.fill"
     }
 
     private var buttonTitle: String {
-        if tunnel.isBusy { return "Подождите…" }
+        if tunnel.isBusy { return "Отменить" }
         return tunnel.isConnected ? "Отключиться" : "Подключиться"
     }
 }
