@@ -208,7 +208,7 @@ private struct ConnectionOrb: View {
             Image(systemName: connected ? "lock.fill" : "lock.open.fill")
                 .font(.system(size: 50, weight: .medium))
                 .foregroundStyle(connected ? AnyShapeStyle(Theme.aurora) : AnyShapeStyle(color))
-                .contentTransition(.symbolEffect(.replace))
+                .contentTransition(.opacity)
         }
         .frame(height: 240)
         .onAppear { startAnimations() }
