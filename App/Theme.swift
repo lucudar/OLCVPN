@@ -228,6 +228,39 @@ struct GlassButtonStyle: ButtonStyle {
     }
 }
 
+// MARK: - Тоггл (монохром)
+
+/// Переключатель в духе минимализма.
+///
+/// ИСПРАВЛЕНО (1.2.3): раньше в «Настройках» тоггл был `.tint(Theme.teal)`,
+/// а в монохромной теме `Theme.teal` = белый. Во включённом состоянии
+/// белая дорожка + белый бегунок сливались в сплошное белое пятно.
+/// Здесь: белая дорожка и **тёмный** бегунок при on; серая дорожка и светлый бегунок при off.
+struct MonoToggleStyle: ToggleStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack {
+            configuration.label
+                .foregroundStyle(Theme.textPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 8)
+            ZStack {
+                Capsule()
+                    .fill(configuration.isOn ? Color.white : Color.white.opacity(0.14))
+                    .overlay(Capsule().strokeBorder(Theme.stroke, lineWidth: 1))
+                    .frame(width: 50, height: 30)
+                Circle()
+                    .fill(configuration.isOn ? Theme.bgDeep : Theme.textPrimary)
+                    .frame(width: 24, height: 24)
+                    .offset(x: configuration.isOn ? 10 : -10)
+                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+            }
+            .animation(.easeInOut(duration: 0.18), value: configuration.isOn)
+            .contentShape(Capsule())
+            .onTapGesture { configuration.isOn.toggle() }
+        }
+    }
+}
+
 // MARK: - Чип / pill
 
 /// Маленькая «таблетка» с подписью (carrier · transport и т.п.).

@@ -74,6 +74,13 @@ final class TunnelManager: ObservableObject {
 
     func disconnect() {
         DiagLog.log("Запрос отключения")
+        // Оптимистично показываем «Отключение…» СРАЗУ, не дожидаясь
+        // NEVPNStatusDidChange. Иначе кнопка «висит», пока расширение гасит ядро
+        // — отсюда ощущение большой задержки. Реальный статус придёт через наблюдателя.
+        if status == .connected || status == .connecting || status == .reasserting {
+            status = .disconnecting
+        }
+        logPollTask?.cancel()
         manager?.connection.stopVPNTunnel()
     }
 

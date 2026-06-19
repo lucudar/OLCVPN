@@ -15,6 +15,12 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         heavyTransports.contains(t.lowercased()) ? "datachannel" : t
     }
 
+    /// MTU туннеля. 1280 (минимум IPv6) — намеренно консервативно: трафик идёт
+    /// внутри WebRTC datachannel (DTLS+SCTP поверх UDP), а на мобильном интернете
+    /// path-MTU часто < 1500. При mtu=1500 внутренние пакеты фрагментировались/
+    /// терялись → «на Wi-Fi ок, на мобильном плохо». 1280 убирает фрагментацию.
+    private static let tunnelMTU = 1280
+
     override func startTunnel(options: [String: NSObject]?,
                               completionHandler: @escaping (Error?) -> Void) {
         let t0 = Date()
@@ -93,7 +99,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             settings.ipv4Settings = ipv4
             let dnsHost = cfg.dns.split(separator: ":").first.map(String.init) ?? OLC.defaultDNS
             settings.dnsSettings = NEDNSSettings(servers: [dnsHost])
-            settings.mtu = 1500
+            settings.mtu = NSNumber(value: Self.tunnelMTU)
 
             // Белый список: резолвим домены → IP, добавляем excludedRoutes
             if !cfg.whitelist.isEmpty {
@@ -104,7 +110,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 }
             }
 
-            TunnelLog.shared.log("Применяю сетевые настройки (dns=\(dnsHost), mtu=1500, default route, excluded=\(ipv4.excludedRoutes?.count ?? 0))…")
+            TunnelLog.shared.log("Применяю сетевые настройки (dns=\(dnsHost), mtu=\(Self.tunnelMTU), default route, excluded=\(ipv4.excludedRoutes?.count ?? 0))…")
 
             self.setTunnelNetworkSettings(settings) { [weak self] error in
                 guard let self else { return }
@@ -121,6 +127,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 self.tun2socks = Tun2Socks(packetFlow: self.packetFlow,
                                            socksHost: "127.0.0.1",
                                            socksPort: cfg.socksPort,
+                                           mtu: Self.tunnelMTU,
                                            logLevel: cfg.debug ? "info" : "warn")
                 self.tun2socks?.start()
                 TunnelLog.shared.log("=== Туннель запущен (всего \(self.ms(t0: t0)) мс) ===")
@@ -132,9 +139,16 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     override func stopTunnel(with reason: NEProviderStopReason,
                              completionHandler: @escaping () -> Void) {
         TunnelLog.shared.log("Остановка туннеля (reason=\(reason.rawValue) \(Self.reasonText(reason)))")
+        // Быстро гасим tun2socks (сигнал hev_socks5_tunnel_quit) — это дешёво.
         tun2socks?.stop()
         tun2socks = nil
-        OLCCore.stop()
+        // А тяжёлую остановку Go-ядра уводим в фон, чтобы НЕ держать систему:
+        // OLCCore.stop() может блокироваться на завершении WebRTC, из-за чего
+        // отключение «висело» секундами. Сообщаем системе о завершении сразу.
+        DispatchQueue.global(qos: .userInitiated).async {
+            OLCCore.stop()
+            TunnelLog.shared.log("OLCCore.stop() завершён (фон)")
+        }
         completionHandler()
     }
 
@@ -230,59 +244,4 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         else { return nil }
 
         let maskValue = prefix == 0 ? UInt32(0) : UInt32.max << (32 - prefix)
-        let mask = String(format: "%d.%d.%d.%d",
-                          (maskValue >> 24) & 0xFF,
-                          (maskValue >> 16) & 0xFF,
-                          (maskValue >> 8) & 0xFF,
-                          maskValue & 0xFF)
-        return NEIPv4Route(destinationAddress: String(parts[0]), subnetMask: mask)
-    }
-
-    private func isValidIPv4(_ s: String) -> Bool {
-        let parts = s.split(separator: ".")
-        guard parts.count == 4 else { return false }
-        return parts.allSatisfy { Int($0).map { $0 >= 0 && $0 <= 255 } ?? false }
-    }
-
-    private func resolveDNS(_ hostname: String) -> [String] {
-        var hints = addrinfo(
-            ai_flags: 0,
-            ai_family: AF_INET,
-            ai_socktype: SOCK_STREAM,
-            ai_protocol: IPPROTO_TCP,
-            ai_addrlen: 0,
-            ai_canonname: nil,
-            ai_addr: nil,
-            ai_next: nil
-        )
-        var result: UnsafeMutablePointer<addrinfo>?
-
-        let status = getaddrinfo(hostname, nil, &hints, &result)
-        guard status == 0, let head = result else {
-            TunnelLog.shared.log("whitelist DNS: \(hostname) — ошибка резолвинга (status=\(status))")
-            return []
-        }
-        defer { freeaddrinfo(head) }
-
-        var ips: [String] = []
-        var current: UnsafeMutablePointer<addrinfo>? = head
-        while let node = current {
-            if node.pointee.ai_family == AF_INET, let aiAddr = node.pointee.ai_addr {
-                var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
-                aiAddr.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { sin in
-                    inet_ntop(AF_INET, &sin.pointee.sin_addr, &buf, socklen_t(INET_ADDRSTRLEN))
-                }
-                let ip = String(cString: buf)
-                if !ip.isEmpty {
-                    ips.append(ip)
-                }
-            }
-            current = node.pointee.ai_next
-        }
-        return ips
-    }
-
-    private func routeKey(_ route: NEIPv4Route) -> String {
-        "\(route.destinationAddress)/\(route.destinationSubnetMask)"
-    }
-}
+        let mask = String(format: "%d.%d.%d.

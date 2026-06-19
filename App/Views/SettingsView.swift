@@ -47,7 +47,7 @@ struct SettingsView: View {
                             .textInputAutocapitalization(.never).autocorrectionDisabled(true)
                         TextField("SOCKS-порт по умолчанию", text: $portText)
                             .keyboardType(.numberPad)
-                        Toggle("Подробные логи", isOn: $debug).tint(Theme.teal)
+                        Toggle("Подробные логи", isOn: $debug).toggleStyle(MonoToggleStyle())
                     } header: { sectionHeader("Настройки по умолчанию") } footer: {
                         Text("DNS и порт применяются к новым импортированным профилям. Логи влияют на ядро при следующем подключении.")
                             .foregroundStyle(Theme.textSecondary)
