@@ -2,6 +2,7 @@
 #define OLCTunnel_Bridging_Header_h
 
 #include <stdint.h>
+#include <stddef.h>
 
 // hev-socks5-tunnel C API.
 // Прототипы из hev-socks5-tunnel.h (вендорится build.sh в Vendor/hev/).
@@ -19,5 +20,12 @@ int hev_socks5_tunnel_main_from_str(const uint8_t *config_str,
 
 /** Останавливает работающий туннель. */
 void hev_socks5_tunnel_quit(void);
+
+/**
+ * Накопленная статистика трафика с момента старта туннеля.
+ * Любой указатель может быть NULL, если значение не нужно.
+ */
+void hev_socks5_tunnel_stats(size_t *tx_packets, size_t *tx_bytes,
+                             size_t *rx_packets, size_t *rx_bytes);
 
 #endif /* OLCTunnel_Bridging_Header_h */

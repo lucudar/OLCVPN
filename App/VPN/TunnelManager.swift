@@ -10,15 +10,29 @@ final class TunnelManager: ObservableObject {
     /// Живой снимок in-memory лога расширения (через IPC). Также сохраняется в
     /// UserDefaults.standard (\"olc.ext.log\") и виден на экране диагностики.
     @Published var extensionLog: String = ""
+    /// Момент успешного подключения — для счётчика времени сессии. nil = не подключены.
+    @Published var connectedSince: Date?
+    /// Накопленный за сессию трафик (байты), приходит из расширения по IPC.
+    @Published var txBytes: UInt64 = 0
+    @Published var rxBytes: UInt64 = 0
 
     static let extLogKey = "olc.ext.log"
 
     private var manager: NETunnelProviderManager?
     private var statusObserver: NSObjectProtocol?
     private var logPollTask: Task<Void, Never>?
+    private var statsPollTask: Task<Void, Never>?
     /// Последнее значение lastError, которое мы уже залогировали, чтобы не
     /// спамить в лог на каждой смене статуса (наблюдатель срабатывает часто).
     private var lastLoggedError: String?
+
+    // Состояние для авто-переподключения / on-demand.
+    private var lastProviderConfig: [String: Any]?
+    private var wantsConnection = false
+    private var userInitiatedStop = false
+    private var onDemandEnabled = false
+    private var autoReconnectEnabled = false
+    private var reconnectAttempts = 0
 
     func prepare() async {
         DiagLog.debug("prepare: loadAllFromPreferences…", tag: "tunnel")
@@ -27,6 +41,7 @@ final class TunnelManager: ObservableObject {
             let m = all.first ?? NETunnelProviderManager()
             self.manager = m
             self.status = m.connection.status
+            if m.connection.status == .connected { self.connectedSince = Date() }
             observeStatus()
             DiagLog.debug("prepare: готово, профилей VPN=\(all.count), статус=\(m.connection.status.rawValue)", tag: "tunnel")
         } catch {
@@ -37,10 +52,18 @@ final class TunnelManager: ObservableObject {
 
     /// Подключение: записываем активный конфиг в providerConfiguration VPN-профиля
     /// (работает без App Group), сохраняем и стартуем.
-    func connect(providerConfig: [String: Any]) {
+    /// - onDemand: включить системный On-Demand (всегда включён / Kill Switch).
+    /// - autoReconnect: переподключаться силами приложения при разрыве.
+    func connect(providerConfig: [String: Any], onDemand: Bool = false, autoReconnect: Bool = false) {
         lastError = nil
         lastLoggedError = nil
-        DiagLog.debug("connect: старт (ключей в providerConfig: \(providerConfig.keys.count))", tag: "tunnel")
+        lastProviderConfig = providerConfig
+        wantsConnection = true
+        userInitiatedStop = false
+        onDemandEnabled = onDemand
+        autoReconnectEnabled = autoReconnect
+        reconnectAttempts = 0
+        DiagLog.debug("connect: старт (ключей=\(providerConfig.keys.count), onDemand=\(onDemand), autoReconnect=\(autoReconnect))", tag: "tunnel")
         Task { await self.saveAndStart(providerConfig: providerConfig) }
     }
 
@@ -56,6 +79,7 @@ final class TunnelManager: ObservableObject {
             m.protocolConfiguration = proto
             m.localizedDescription = "OLCVPN"
             m.isEnabled = true
+            applyOnDemand(to: m)
             DiagLog.debug("saveAndStart: saveToPreferences…", tag: "tunnel")
             try await m.saveToPreferences()
             DiagLog.debug("saveAndStart: loadFromPreferences…", tag: "tunnel")
@@ -72,8 +96,39 @@ final class TunnelManager: ObservableObject {
         }
     }
 
+    /// Настраивает On-Demand-правила на профиле в соответствии с onDemandEnabled.
+    private func applyOnDemand(to m: NETunnelProviderManager) {
+        if onDemandEnabled {
+            let rule = NEOnDemandRuleConnect()
+            rule.interfaceTypeMatch = .any
+            m.onDemandRules = [rule]
+            m.isOnDemandEnabled = true
+            DiagLog.log("On-Demand (всегда включён / Kill Switch) активирован")
+        } else {
+            m.onDemandRules = []
+            m.isOnDemandEnabled = false
+        }
+    }
+
+    /// Включить/выключить On-Demand на уже существующем профиле без переподключения.
+    /// Применяется немедленно (если профиль уже настроен).
+    func setOnDemand(_ enabled: Bool) {
+        onDemandEnabled = enabled
+        guard let m = manager, m.protocolConfiguration != nil else {
+            DiagLog.debug("setOnDemand(\(enabled)): профиль ещё не настроен — применю при следующем подключении", tag: "tunnel")
+            return
+        }
+        applyOnDemand(to: m)
+        Task {
+            do { try await m.saveToPreferences() }
+            catch { DiagLog.error("setOnDemand: \(error.localizedDescription)") }
+        }
+    }
+
     func disconnect() {
         DiagLog.log("Запрос отключения")
+        userInitiatedStop = true
+        wantsConnection = false
         // Оптимистично показываем «Отключение…» СРАЗУ, не дожидаясь
         // NEVPNStatusDidChange. Иначе кнопка «висит», пока расширение гасит ядро
         // — отсюда ощущение большой задержки. Реальный статус придёт через наблюдателя.
@@ -81,6 +136,19 @@ final class TunnelManager: ObservableObject {
             status = .disconnecting
         }
         logPollTask?.cancel()
+        statsPollTask?.cancel()
+        Task { await self.performStop() }
+    }
+
+    private func performStop() async {
+        // Если включён On-Demand — сначала выключаем его, иначе система
+        // немедленно переподключит туннель и «отключиться» не получится.
+        if let m = manager, m.isOnDemandEnabled {
+            m.isOnDemandEnabled = false
+            m.onDemandRules = []
+            do { try await m.saveToPreferences() }
+            catch { DiagLog.error("performStop: не отключил on-demand: \(error.localizedDescription)") }
+        }
         manager?.connection.stopVPNTunnel()
     }
 
@@ -102,6 +170,37 @@ final class TunnelManager: ObservableObject {
                 }
             }
         }
+    }
+
+    /// Пока сессия подключена — раз в 2с забираем счётчики трафика из расширения.
+    func startStatsPolling() {
+        statsPollTask?.cancel()
+        statsPollTask = Task { [weak self] in
+            guard let self else { return }
+            while !Task.isCancelled {
+                let resp = await self.sendCommand("stats")
+                if let parsed = TunnelManager.parseStats(resp) {
+                    self.txBytes = parsed.tx
+                    self.rxBytes = parsed.rx
+                }
+                if self.status != .connected { break }
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+            }
+        }
+    }
+
+    /// Разбирает ответ расширения формата «tx=<байты>;rx=<байты>».
+    static func parseStats(_ s: String) -> (tx: UInt64, rx: UInt64)? {
+        var tx: UInt64?
+        var rx: UInt64?
+        for part in s.split(separator: ";") {
+            let kv = part.split(separator: "=")
+            guard kv.count == 2 else { continue }
+            if kv[0] == "tx" { tx = UInt64(kv[1]) }
+            if kv[0] == "rx" { rx = UInt64(kv[1]) }
+        }
+        if let tx, let rx { return (tx, rx) }
+        return nil
     }
 
     /// Запросить лог расширения по IPC. Работает, пока сессия connecting/connected.
@@ -140,15 +239,32 @@ final class TunnelManager: ObservableObject {
         ) { [weak self] _ in
             guard let self, let conn = self.manager?.connection else { return }
             Task { @MainActor in
+                let prev = self.status
                 self.status = conn.status
                 DiagLog.log("статус -> \(self.statusText)")
-                // Сбрасываем «залипшую» ошибку при успешном подключении —
-                // иначе на экране ConnectView продолжала светиться старая.
-                if conn.status == .connected, self.lastError != nil {
-                    DiagLog.log("lastError сброшен (connected)")
-                    self.lastError = nil
-                    self.lastLoggedError = nil
+
+                switch conn.status {
+                case .connected:
+                    if self.connectedSince == nil { self.connectedSince = Date() }
+                    self.reconnectAttempts = 0
+                    self.startStatsPolling()
+                    // Сбрасываем «залипшую» ошибку при успешном подключении —
+                    // иначе на экране ConnectView продолжала светиться старая.
+                    if self.lastError != nil {
+                        DiagLog.log("lastError сброшен (connected)")
+                        self.lastError = nil
+                        self.lastLoggedError = nil
+                    }
+                case .disconnected:
+                    self.connectedSince = nil
+                    self.txBytes = 0
+                    self.rxBytes = 0
+                    self.statsPollTask?.cancel()
+                    self.maybeAutoReconnect(previous: prev)
+                default:
+                    break
                 }
+
                 // Логируем ошибку только если она изменилась с прошлого раза:
                 // наблюдатель NEVPNStatusDidChange срабатывает на каждое
                 // промежуточное состояние и плодил бы дубли.
@@ -156,6 +272,29 @@ final class TunnelManager: ObservableObject {
                     DiagLog.error("lastError: \(e)")
                     self.lastLoggedError = e
                 }
+            }
+        }
+    }
+
+    /// Авто-переподключение: только если соединение было установлено и неожиданно
+    /// разорвалось (не пользователем и не в режиме On-Demand, который чинит себя сам).
+    private func maybeAutoReconnect(previous: NEVPNStatus) {
+        guard autoReconnectEnabled,
+              wantsConnection,
+              !userInitiatedStop,
+              !onDemandEnabled,
+              previous == .connected,
+              let cfg = lastProviderConfig,
+              reconnectAttempts < 5
+        else { return }
+        reconnectAttempts += 1
+        let delay = min(2.0 * Double(reconnectAttempts), 10)
+        DiagLog.log("Соединение разорвано — авто-переподключение через \(Int(delay)) с (попытка \(reconnectAttempts)/5)")
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: UInt64(delay * 1_000_000_000))
+            guard let self else { return }
+            if self.wantsConnection, !self.userInitiatedStop {
+                await self.saveAndStart(providerConfig: cfg)
             }
         }
     }
@@ -170,6 +309,12 @@ final class TunnelManager: ObservableObject {
         case .disconnecting: return "Отключение…"
         @unknown default: return "—"
         }
+    }
+
+    /// Длительность текущей сессии (сек), либо nil если не подключены.
+    var connectedDuration: TimeInterval? {
+        guard let connectedSince else { return nil }
+        return Date().timeIntervalSince(connectedSince)
     }
 
     var isConnected: Bool { status == .connected }

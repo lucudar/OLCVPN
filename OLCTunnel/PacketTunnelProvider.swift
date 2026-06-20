@@ -181,6 +181,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         case "clearlog":
             TunnelLog.shared.clear()
             completionHandler?(Data("ok".utf8))
+        case "stats":
+            let (tx, rx) = tun2socks?.stats() ?? (0, 0)
+            completionHandler?(Data("tx=\(tx);rx=\(rx)".utf8))
         default:
             let running = OLCCore.isRunning()
             completionHandler?(Data([running ? 1 : 0]))
@@ -244,4 +247,56 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         else { return nil }
 
         let maskValue = prefix == 0 ? UInt32(0) : UInt32.max << (32 - prefix)
-        let mask = String(format: "%d.%d.%d.
+        let mask = String(format: "%u.%u.%u.%u",
+                          CUnsignedInt((maskValue >> 24) & 0xFF),
+                          CUnsignedInt((maskValue >> 16) & 0xFF),
+                          CUnsignedInt((maskValue >> 8) & 0xFF),
+                          CUnsignedInt(maskValue & 0xFF))
+        return NEIPv4Route(destinationAddress: String(parts[0]), subnetMask: mask)
+    }
+
+    private func isValidIPv4(_ s: String) -> Bool {
+        let parts = s.split(separator: ".")
+        guard parts.count == 4 else { return false }
+        for part in parts {
+            guard let n = Int(part), n >= 0, n <= 255, String(n) == part else { return false }
+        }
+        return true
+    }
+
+    /// Резолвит домен в IPv4-адреса через getaddrinfo с лимитом ~2 секунды.
+    /// Резолвинг выполняется в фоне; по таймауту возвращаем пусто, не блокируя
+    /// старт туннеля надолго.
+    private func resolveDNS(_ host: String) -> [String] {
+        let sem = DispatchSemaphore(value: 0)
+        var collected: [String] = []
+        DispatchQueue.global(qos: .userInitiated).async {
+            var hints = addrinfo(ai_flags: 0, ai_family: AF_INET, ai_socktype: SOCK_STREAM,
+                                 ai_protocol: 0, ai_addrlen: 0,
+                                 ai_canonname: nil, ai_addr: nil, ai_next: nil)
+            var res: UnsafeMutablePointer<addrinfo>?
+            if getaddrinfo(host, nil, &hints, &res) == 0, let first = res {
+                var ptr: UnsafeMutablePointer<addrinfo>? = first
+                while let p = ptr {
+                    if let sa = p.pointee.ai_addr {
+                        var buf = [CChar](repeating: 0, count: Int(INET_ADDRSTRLEN))
+                        sa.withMemoryRebound(to: sockaddr_in.self, capacity: 1) { sin in
+                            var addr = sin.pointee.sin_addr
+                            inet_ntop(AF_INET, &addr, &buf, socklen_t(INET_ADDRSTRLEN))
+                        }
+                        let ip = String(cString: buf)
+                        if !ip.isEmpty { collected.append(ip) }
+                    }
+                    ptr = p.pointee.ai_next
+                }
+                freeaddrinfo(res)
+            }
+            sem.signal()
+        }
+        return sem.wait(timeout: .now() + 2) == .success ? collected : []
+    }
+
+    private func routeKey(_ route: NEIPv4Route) -> String {
+        "\(route.destinationAddress)/\(route.destinationSubnetMask)"
+    }
+}

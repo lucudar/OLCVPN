@@ -59,6 +59,14 @@ final class Tun2Socks {
         TunnelLog.shared.log("стоп", tag: "tun2socks")
     }
 
+    /// Накопленная статистика трафика (байты) из hev-socks5-tunnel.
+    /// Возвращает (отправлено, получено). Если ядро ещё не считает — нули.
+    func stats() -> (tx: UInt64, rx: UInt64) {
+        var txPackets = 0, txBytes = 0, rxPackets = 0, rxBytes = 0
+        hev_socks5_tunnel_stats(&txPackets, &txBytes, &rxPackets, &rxBytes)
+        return (UInt64(max(0, txBytes)), UInt64(max(0, rxBytes)))
+    }
+
     /// YAML-конфиг для hev-socks5-tunnel.
     private func makeConfig() -> String {
         """
