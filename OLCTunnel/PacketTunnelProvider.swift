@@ -101,13 +101,37 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
             settings.dnsSettings = NEDNSSettings(servers: [dnsHost])
             settings.mtu = NSNumber(value: Self.tunnelMTU)
 
-            // Белый список: резолвим домены → IP, добавляем excludedRoutes
+            // ── Маршруты, исключаемые из туннеля ──────────────────────────────
+            var excludedRoutes: [NEIPv4Route] = []
+
+            // 1) DNS-резолвер выводим МИМО туннеля.
+            //    Транспорт olcRTC — это TCP-only SOCKS5 (CONNECT), а DNS идёт по UDP.
+            //    hev пытается UDP ASSOCIATE, ядро его отклоняет → DNS-запросы никуда
+            //    не уходят и НИ ОДИН домен не резолвится (даже Яндекс), хотя по голому
+            //    IP сервер ходит исправно (проверено: connect 1.1.1.1:443 за ~13 мс).
+            //    Поэтому DNS к dnsHost пускаем напрямую через физический интерфейс.
+            if self.isValidIPv4(dnsHost) {
+                excludedRoutes.append(NEIPv4Route(destinationAddress: dnsHost,
+                                                  subnetMask: "255.255.255.255"))
+                TunnelLog.shared.log("DNS \(dnsHost) выведен мимо туннеля (UDP DNS не проходит через TCP-only SOCKS)")
+            }
+
+            // 2) Частные/локальные сети не загоняем в туннель — иначе системные
+            //    проверки связности (напр. 192.168.0.1:80) уходят на сервер и висят
+            //    по 10 с (dial … i/o timeout), забивая управляющий канал (missed_pongs).
+            for cidr in ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
+                         "169.254.0.0/16", "100.64.0.0/10"] {
+                if let r = self.parseCIDR(cidr) { excludedRoutes.append(r) }
+            }
+
+            // 3) Пользовательский белый список (домены / IP / CIDR).
             if !cfg.whitelist.isEmpty {
-                let excludedRoutes = self.resolveWhitelist(cfg.whitelist)
-                if !excludedRoutes.isEmpty {
-                    ipv4.excludedRoutes = excludedRoutes
-                    TunnelLog.shared.log("Белый список: \(excludedRoutes.count) маршрутов исключено из туннеля")
-                }
+                excludedRoutes.append(contentsOf: self.resolveWhitelist(cfg.whitelist))
+            }
+
+            if !excludedRoutes.isEmpty {
+                ipv4.excludedRoutes = excludedRoutes
+                TunnelLog.shared.log("Исключено из туннеля: \(excludedRoutes.count) маршрутов")
             }
 
             TunnelLog.shared.log("Применяю сетевые настройки (dns=\(dnsHost), mtu=\(Self.tunnelMTU), default route, excluded=\(ipv4.excludedRoutes?.count ?? 0))…")
