@@ -34,6 +34,9 @@ struct DiagnosticsView: View {
                     Toggle(isOn: $autoRefresh) {
                         Label("Авто-обновление", systemImage: "timer")
                     }
+                    ShareLink(item: lines.joined(separator: "\n")) {
+                        Label("Поделиться логом", systemImage: "square.and.arrow.up")
+                    }
                     Divider()
                     Button(role: .destructive) {
                         DiagLog.clear()

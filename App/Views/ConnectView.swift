@@ -52,6 +52,11 @@ struct ConnectView: View {
                                 }
                             }
 
+                        if tunnel.isConnected {
+                            sessionStats
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+
                         if let err = tunnel.lastError {
                             Label(err, systemImage: "exclamationmark.triangle.fill")
                                 .font(.footnote)
@@ -73,6 +78,7 @@ struct ConnectView: View {
                     }
                     .padding(.horizontal, Theme.hPadding)
                     .padding(.vertical, 8)
+                    .animation(.easeInOut(duration: 0.3), value: tunnel.isConnected)
                 }
             }
             .navigationTitle("OLCVPN")
@@ -128,6 +134,50 @@ struct ConnectView: View {
         }
     }
 
+    // MARK: - Статистика сессии (время + трафик)
+
+    @ViewBuilder
+    private var sessionStats: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { _ in
+            HStack(spacing: 0) {
+                statItem(value: uptimeString, label: "Время")
+                statDivider
+                statItem(value: ByteFormat.string(tunnel.txBytes), label: "Отдано")
+                statDivider
+                statItem(value: ByteFormat.string(tunnel.rxBytes), label: "Принято")
+            }
+            .frame(maxWidth: .infinity)
+            .glassCard(padding: 14)
+        }
+    }
+
+    private var statDivider: some View {
+        Rectangle()
+            .fill(Theme.stroke)
+            .frame(width: 1, height: 28)
+    }
+
+    private func statItem(value: String, label: String) -> some View {
+        VStack(spacing: 4) {
+            Text(value)
+                .font(.subheadline.weight(.semibold).monospacedDigit())
+                .foregroundStyle(Theme.textPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+            Text(label)
+                .font(.caption2)
+                .foregroundStyle(Theme.textSecondary)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
+    private var uptimeString: String {
+        let d = Int(tunnel.connectedDuration ?? 0)
+        let h = d / 3600, m = (d % 3600) / 60, s = d % 60
+        if h > 0 { return String(format: "%d:%02d:%02d", h, m, s) }
+        return String(format: "%02d:%02d", m, s)
+    }
+
     private var connectButton: some View {
         Button {
             // Подключено или идёт подключение — кнопка отключает/отменяет.
@@ -142,7 +192,9 @@ struct ConnectView: View {
                 }
                 store.publishActiveToTunnel()
                 withAnimation(.easeInOut(duration: 0.3)) {
-                    tunnel.connect(providerConfig: cfg)
+                    tunnel.connect(providerConfig: cfg,
+                                   onDemand: store.settings.alwaysOn,
+                                   autoReconnect: store.settings.autoReconnect)
                 }
             }
         } label: {
@@ -167,6 +219,21 @@ struct ConnectView: View {
     private var buttonTitle: String {
         if tunnel.isBusy { return "Отменить" }
         return tunnel.isConnected ? "Отключиться" : "Подключиться"
+    }
+}
+
+// MARK: - Форматирование байт
+
+enum ByteFormat {
+    static func string(_ bytes: UInt64) -> String {
+        let units = ["B", "KB", "MB", "GB", "TB"]
+        var value = Double(bytes)
+        var i = 0
+        while value >= 1024 && i < units.count - 1 {
+            value /= 1024
+            i += 1
+        }
+        return i == 0 ? "\(Int(value)) \(units[i])" : String(format: "%.1f %@", value, units[i])
     }
 }
 

@@ -8,6 +8,7 @@ struct ImportView: View {
     @State private var uri: String = ""
     @State private var clientID: String = ""
     @State private var errorText: String?
+    @State private var showingScanner = false
 
     private var rowBg: some View { Color.white.opacity(0.05) }
 
@@ -26,6 +27,12 @@ struct ImportView: View {
                             if let s = UIPasteboard.general.string { uri = s }
                         } label: {
                             Label("Вставить из буфера", systemImage: "doc.on.clipboard")
+                                .foregroundStyle(Theme.teal)
+                        }
+                        Button {
+                            showingScanner = true
+                        } label: {
+                            Label("Сканировать QR", systemImage: "qrcode.viewfinder")
                                 .foregroundStyle(Theme.teal)
                         }
                     } header: { SectionTitle(text: "Ссылка olcrtc://", systemImage: "link") }
@@ -67,6 +74,25 @@ struct ImportView: View {
                     Button("Добавить") { add() }
                         .disabled(uri.isEmpty)
                         .fontWeight(.semibold)
+                }
+            }
+            .sheet(isPresented: $showingScanner) {
+                NavigationStack {
+                    QRScannerView { value in
+                        uri = value
+                        showingScanner = false
+                    } onError: { msg in
+                        errorText = msg
+                        showingScanner = false
+                    }
+                    .ignoresSafeArea()
+                    .navigationTitle("Сканирование QR")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .cancellationAction) {
+                            Button("Отмена") { showingScanner = false }
+                        }
+                    }
                 }
             }
         }

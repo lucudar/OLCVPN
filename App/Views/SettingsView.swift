@@ -7,6 +7,10 @@ struct SettingsView: View {
     @State private var dns: String = ""
     @State private var portText: String = ""
     @State private var debug: Bool = true
+    @State private var autoReconnect: Bool = true
+    @State private var alwaysOn: Bool = false
+    @State private var pingText: String?
+    @State private var pinging = false
 
     private var appVersion: String {
         let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "—"
@@ -43,6 +47,16 @@ struct SettingsView: View {
                     }
 
                     Section {
+                        Toggle("Авто-переподключение", isOn: $autoReconnect).toggleStyle(MonoToggleStyle())
+                        Toggle("Всегда включён (Kill Switch)", isOn: $alwaysOn).toggleStyle(MonoToggleStyle())
+                    } header: { sectionHeader("Сеть и подключение") } footer: {
+                        Text("Авто-переподключение само поднимает туннель при обрыве (до 5 попыток). «Всегда включён» держит VPN активным через системный On-Demand и перехватывает трафик до подключения — отключается только вручную здесь или кнопкой на главном экране.")
+                            .foregroundStyle(Theme.textSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .listRowBackground(rowBg)
+
+                    Section {
                         TextField("DNS по умолчанию", text: $dns)
                             .textInputAutocapitalization(.never).autocorrectionDisabled(true)
                         TextField("SOCKS-порт по умолчанию", text: $portText)
@@ -63,6 +77,17 @@ struct SettingsView: View {
                                 Image(systemName: "doc.text.magnifyingglass").foregroundStyle(Theme.teal)
                             }
                         }
+                        Button {
+                            runPing()
+                        } label: {
+                            Label { Text(pinging ? "Проверяю…" : "Тест соединения") } icon: {
+                                Image(systemName: "wave.3.right").foregroundStyle(Theme.teal)
+                            }
+                        }
+                        .disabled(pinging || store.activeProfile == nil)
+                        if let pingText {
+                            statusRow("Результат теста", pingText, color: Theme.textSecondary)
+                        }
                     } header: { sectionHeader("Диагностика") }
                     .listRowBackground(rowBg)
 
@@ -79,6 +104,11 @@ struct SettingsView: View {
             .onChange(of: dns) { _ in saveSettings() }
             .onChange(of: portText) { _ in saveSettings() }
             .onChange(of: debug) { _ in saveSettings() }
+            .onChange(of: autoReconnect) { _ in saveSettings() }
+            .onChange(of: alwaysOn) { v in
+                saveSettings()
+                tunnel.setOnDemand(v)
+            }
         }
     }
 
@@ -106,6 +136,8 @@ struct SettingsView: View {
         dns = store.settings.defaultDNS
         portText = String(store.settings.defaultSocksPort)
         debug = store.settings.debugLogging
+        autoReconnect = store.settings.autoReconnect
+        alwaysOn = store.settings.alwaysOn
     }
 
     private func saveSettings() {
@@ -113,7 +145,25 @@ struct SettingsView: View {
         s.defaultDNS = dns.trimmingCharacters(in: .whitespaces)
         if let port = Int(portText), port > 0 { s.defaultSocksPort = port }
         s.debugLogging = debug
+        s.autoReconnect = autoReconnect
+        s.alwaysOn = alwaysOn
         guard s != store.settings else { return }
         store.updateSettings(s)
+    }
+
+    private func runPing() {
+        guard let p = store.activeProfile, let key = store.keyHex(for: p) else {
+            pingText = "Нет активного профиля"
+            return
+        }
+        pinging = true
+        pingText = nil
+        Task {
+            let ms = await PingService.ping(profile: p, keyHex: key)
+            await MainActor.run {
+                pinging = false
+                if let ms { pingText = "\(ms) мс" } else { pingText = "Недоступно" }
+            }
+        }
     }
 }

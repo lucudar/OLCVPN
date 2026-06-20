@@ -18,6 +18,8 @@
     <string>$(MARKETING_VERSION)</string>
     <key>CFBundleVersion</key>
     <string>$(CURRENT_PROJECT_VERSION)</string>
+    <key>NSCameraUsageDescription</key>
+    <string>Камера нужна только для сканирования QR-кода с настройками профиля. Видео никуда не передаётся.</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>CFBundleURLTypes</key>
